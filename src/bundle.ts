@@ -29,8 +29,9 @@ fs.rmSync("build", { recursive: true, force: true });
 const SOURCE_FOLDER = "src";
 const BUILD_FOLDER = "build";
 const TEMPLATE_LITERAL_MINIFIER = /\n\s+/g;
-const IMPORT_STATEMENT = /import(\s|.)*?(from)?['"](\s|.)*?['"]/g;
-const IMPORTS = /(?<=import)(\s|.)*?(?=(from|"|'))/;
+const IMPORT_STATEMENT = /import[^(](\s|.)*?(from)?['"](\s|.)*?['"]/g;
+const DYNAMIC_IMPORT_STATEMENT = /import\((\s|.)*?\)/g;
+const IMPORTS = /(?<=import)[^(](\s|.)*?(?=(from|"|'))/;
 const IMPORT_PACKAGE = /(?<=['"])(\s|.)*(?=['"])/;
 const DESTRUCTURE = /[^,{}]+/g;
 const SCRIPT_CONTENT = /<script(\s|.)*?<\/script>/g;
@@ -92,7 +93,16 @@ function createGlobalJS(err: globCB[0], files: globCB[1]) {
   files.forEach((filename) => {
     const fileText = fs.readFileSync(filename, { encoding: "utf-8" });
     const importStatements = fileText.match(IMPORT_STATEMENT);
+    const dynamicImportStatements = fileText.match(DYNAMIC_IMPORT_STATEMENT);
+
     importStatements && imports.push(...importStatements);
+    dynamicImportStatements &&
+      imports.push(
+        ...dynamicImportStatements.map((importLine) => {
+          const [pkgName] = importLine.match(IMPORT_PACKAGE)!;
+          return `import defaultImp from "${pkgName}"`;
+        })
+      );
   });
 
   let globalImport = "";
@@ -190,7 +200,8 @@ function minifyHTML(filename: string, buildFilename: string) {
     const unmodifiedScript = script;
 
     const importStatements = script.match(IMPORT_STATEMENT);
-    importStatements?.forEach((importLine) => {
+    const dynamicImportStatements = script.match(DYNAMIC_IMPORT_STATEMENT);
+    const replacer = (importLine: string) => {
       script = script.replace(
         importLine,
         importLine.replace(IMPORT_PACKAGE, (originalPKG) => {
@@ -198,7 +209,9 @@ function minifyHTML(filename: string, buildFilename: string) {
           return pkg.startsWith(".") ? originalPKG : `./globals/${pkg}.js`;
         })
       );
-    });
+    };
+    importStatements?.forEach(replacer);
+    dynamicImportStatements?.forEach(replacer);
 
     const transpiled = esbuild.transformSync(script, {
       charset: "utf8",

@@ -2,6 +2,10 @@
 
 > A very simple zero-config bundler for HTML files. The idea is to use HTML as Single File Components, because HTML can already include `<style>` and `<script>` Elements. Additionally, `TypeScript` can be used as inline or referenced script in HTML.
 
+## Disclaimer
+
+- This package relies heavily on `RegEx`. It is probably not production ready and might not work for a special combination of imports.
+
 ## Installation and Usage
 
 ```properties
@@ -47,10 +51,6 @@ The bundler always globs all HTML, CSS and TS/JS files from the src/ directory a
 ### Output
 
 ![Output](output.JPG)
-
-## Quirks
-
-- This software relies heavily on RegEx. It is probably not production ready and might not work for a special combination of imports. Also, it does not work with dynamic import.
 
 ## Roadmap
 
