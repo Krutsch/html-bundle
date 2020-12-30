@@ -22,10 +22,9 @@ fs.rmSync("build", { recursive: true, force: true });
 const SOURCE_FOLDER = "src";
 const BUILD_FOLDER = "build";
 const TEMPLATE_LITERAL_MINIFIER = /\n\s+/g;
-const IMPORT_STATEMENT = /import(\s|.)*?from\s+['"](\s|.)*?['"]/g;
-const IMPORT_FEATURES = /(?<=import)(\s|.)*(?=from)/;
-const IMPORT_PACKAGE = /(?<=from\s+)(\s|.)*/;
-const UNSTRINGIFY = /['"]/g;
+const IMPORT_STATEMENT = /import(\s|.)*?(from)?['"](\s|.)*?['"]/g;
+const IMPORTS = /(?<=import)(\s|.)*?(?=(from|"|'))/;
+const IMPORT_PACKAGE = /(?<=['"])(\s|.)*(?=['"])/;
 const DESTRUCTURE = /[^,{}]+/g;
 const SCRIPT_CONTENT = /<script(\s|.)*?<\/script>/g;
 const UNSCRIPT_START = /<script.*?>/;
@@ -75,27 +74,51 @@ function createGlobalJS(err, files) {
         const importStatements = fileText.match(IMPORT_STATEMENT);
         importStatements && imports.push(...importStatements);
     });
+    let globalImport = "";
     imports.forEach((importLine) => {
         let [pkg] = importLine.match(IMPORT_PACKAGE);
-        pkg = pkg.trim().replace(UNSTRINGIFY, "");
+        pkg = pkg.trim();
         if (pkg.startsWith("."))
             return; // File will be transformed already
-        const [importFeatureString] = importLine.match(IMPORT_FEATURES);
-        const importFeatures = importFeatureString
-            .match(DESTRUCTURE)
-            .map((singleImport) => singleImport.trim())
-            .filter(Boolean);
-        if (HTMLGlobalDependency.has(pkg)) {
-            const pkgSet = HTMLGlobalDependency.get(pkg);
-            importFeatures.forEach((feature) => pkgSet.add(feature));
+        let [imports] = importLine.match(IMPORTS);
+        imports = imports.trim();
+        let importsDestructured = [];
+        if (imports === "") {
+            globalImport = "*";
+        }
+        else if (imports.startsWith("{")) {
+            importsDestructured = imports
+                .match(DESTRUCTURE)
+                .map((literal) => literal.trim())
+                .filter(Boolean);
         }
         else {
-            HTMLGlobalDependency.set(pkg, new Set(importFeatures));
+            globalImport = imports;
         }
+        if (HTMLGlobalDependency.has(pkg)) {
+            const pkgObj = HTMLGlobalDependency.get(pkg);
+            importsDestructured.forEach((literal) => pkgObj.literals.add(literal));
+        }
+        else {
+            HTMLGlobalDependency.set(pkg, {
+                global: globalImport,
+                literals: new Set(importsDestructured),
+            });
+        }
+        globalImport = "";
     });
     // Create TS file
-    HTMLGlobalDependency.forEach((importLines, pkg) => {
-        fs.writeFileSync(`${BUILD_FOLDER}/tmp/${pkg}.ts`, `export { ${Array.from(importLines).join(",")} } from "${pkg}";`);
+    HTMLGlobalDependency.forEach(({ global, literals }, pkg) => {
+        let content = "";
+        if (global && global !== "*") {
+            content = `import ${global} from "${pkg}";
+      export default ${global}`;
+        }
+        else {
+            const literalsArr = Array.from(literals);
+            content = `export ${global ? `${global}${literalsArr.length ? "," : ""}` : ""} ${literalsArr.length ? `{ ${literalsArr.join(",")} }` : ""} from "${pkg}";`;
+        }
+        fs.writeFileSync(`${BUILD_FOLDER}/tmp/${pkg}.ts`, content);
     });
     // Bundle TS files
     esbuild.buildSync({
@@ -133,8 +156,8 @@ function minifyHTML(filename, buildFilename) {
         const importStatements = script.match(IMPORT_STATEMENT);
         importStatements?.forEach((importLine) => {
             script = script.replace(importLine, importLine.replace(IMPORT_PACKAGE, (originalPKG) => {
-                const pkg = originalPKG.trim().replace(UNSTRINGIFY, "");
-                return pkg.startsWith(".") ? originalPKG : ` "./globals/${pkg}.js"`;
+                const pkg = originalPKG.trim();
+                return pkg.startsWith(".") ? originalPKG : `./globals/${pkg}.js`;
             }));
         });
         const transpiled = esbuild.transformSync(script, {

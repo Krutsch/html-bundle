@@ -50,10 +50,9 @@ The bundler always globs all HTML, CSS and TS/JS files from the src/ directory a
 
 ## Quirks
 
-- This software relies heavily on RegEx. It is not production ready and when used with packages, it will only support destructured imports. Also, it does not work with dynamic import.
+- This software relies heavily on RegEx. It is probably not production ready and might not work for a special combination of imports. Also, it does not work with dynamic import.
 
 ## Roadmap
 
-- Fix other imports for packages
 - HMR
 - VSCode Plugin for highlighting TypeScript in HTML
