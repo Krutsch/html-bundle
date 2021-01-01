@@ -4,7 +4,7 @@
 
 ## Disclaimer
 
-- This package relies heavily on `RegEx`. It is probably not production ready and I might have missed a import case.
+- This package relies heavily on `RegEx`. It is probably not production ready and I might have missed an import case.
 
 ## Installation and Usage
 
