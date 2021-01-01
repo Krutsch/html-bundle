@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 
 import fs from "fs";
+import { performance } from "perf_hooks";
+import Event from "events";
 import glob from "glob";
+import { watch } from "chokidar";
 import csso from "csso";
 import esbuild from "esbuild";
 import { minify } from "html-minifier";
-import { performance } from "perf_hooks";
-import Event from "events";
+
+const isLive = process.argv.includes("--live");
 
 // Performance Observer
 const taskEmitter = new Event.EventEmitter();
@@ -20,6 +23,31 @@ taskEmitter.on("done", () => {
     console.log(
       `🚀 Build finished in ${(performance.now() - start).toFixed(2)}ms ✨`
     );
+
+    // Watch for changes
+    if (isLive) {
+      console.log(`⌛ Waiting for file changes ...`);
+
+      watch(SOURCE_FOLDER).on("change", (filename) => {
+        const buildFilename = filename.replace(
+          `${SOURCE_FOLDER}\\`,
+          `${BUILD_FOLDER}\\`
+        );
+
+        if (filename.endsWith(".html")) {
+          glob(`${SOURCE_FOLDER}/**/*.html`, {}, (err, files) => {
+            createGlobalJS(err, files);
+            minifyHTML(filename, buildFilename);
+          });
+        } else if (filename.endsWith(".ts") || filename.endsWith(".js")) {
+          minifyTSJS(filename, buildFilename);
+        } else if (filename.endsWith(".css")) {
+          minifyCSS(filename, buildFilename);
+        }
+
+        console.log(`⚡ modified ${buildFilename}`);
+      });
+    }
   }
 });
 
@@ -120,7 +148,7 @@ function createGlobalJS(err: globCB[0], files: globCB[1]) {
     } else if (imports.startsWith("{")) {
       importsDestructured = imports
         .match(DESTRUCTURE)!
-        .map((literal) => literal.trim())
+        .map((distinctVarString) => distinctVarString.trim())
         .filter(Boolean);
     } else {
       globalImport = imports;
@@ -128,30 +156,32 @@ function createGlobalJS(err: globCB[0], files: globCB[1]) {
 
     if (HTMLGlobalDependency.has(pkg)) {
       const pkgObj = HTMLGlobalDependency.get(pkg);
-      importsDestructured.forEach((literal) => pkgObj.literals.add(literal));
+      importsDestructured.forEach((distinctVarString) =>
+        pkgObj.distinctVars.add(distinctVarString)
+      );
     } else {
       HTMLGlobalDependency.set(pkg, {
         global: globalImport,
-        literals: new Set(importsDestructured),
+        distinctVars: new Set(importsDestructured),
       });
     }
     globalImport = "";
   });
 
   // Create TS file
-  HTMLGlobalDependency.forEach(({ global, literals }, pkg) => {
+  HTMLGlobalDependency.forEach(({ global, distinctVars }, pkg) => {
     let content = "";
 
     if (global && global !== "*") {
       content = `import ${global} from "${pkg}";
       export default ${global}`;
     } else {
-      const literalsArr = Array.from(literals);
+      const distinctVarsArr = Array.from(distinctVars);
 
       content = `export ${
-        global ? `${global}${literalsArr.length ? "," : ""}` : ""
+        global ? `${global}${distinctVarsArr.length ? "," : ""}` : ""
       } ${
-        literalsArr.length ? `{ ${literalsArr.join(",")} }` : ""
+        distinctVarsArr.length ? `{ ${distinctVarsArr.join(",")} }` : ""
       } from "${pkg}";`;
     }
 

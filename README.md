@@ -4,14 +4,14 @@
 
 ## Disclaimer
 
-- This package relies heavily on `RegEx`. It is probably not production ready and might not work for a special combination of imports.
+- This package relies heavily on `RegEx`. It is probably not production ready and I might have missed a import case.
 
 ## Installation and Usage
 
 ```properties
 $ npm install -D html-bundle
 { ...
-  "build": "html-bundle"
+  "build": "html-bundle" // '--live' to keep the process alive
 }
 $ npm run build
 ```
@@ -54,5 +54,4 @@ The bundler always globs all HTML, CSS and TS/JS files from the src/ directory a
 
 ## Roadmap
 
-- HMR
 - VSCode Plugin for highlighting TypeScript in HTML
