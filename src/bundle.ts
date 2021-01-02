@@ -28,24 +28,43 @@ taskEmitter.on("done", () => {
     if (isLive) {
       console.log(`⌛ Waiting for file changes ...`);
 
-      watch(SOURCE_FOLDER).on("change", (filename) => {
-        const buildFilename = filename.replace(
-          `${SOURCE_FOLDER}\\`,
-          `${BUILD_FOLDER}\\`
-        );
+      const watcher = watch(SOURCE_FOLDER);
+      let initialAdd = 0;
 
-        if (filename.endsWith(".html")) {
-          glob(`${SOURCE_FOLDER}/**/*.html`, {}, (err, files) => {
-            createGlobalJS(err, files);
-            minifyHTML(filename, buildFilename);
-          });
-        } else if (filename.endsWith(".ts") || filename.endsWith(".js")) {
-          minifyTSJS(filename, buildFilename);
-        } else if (filename.endsWith(".css")) {
-          minifyCSS(filename, buildFilename);
+      watcher.on("add", (filename) => {
+        if (
+          filename.endsWith(".html") ||
+          filename.endsWith(".css") ||
+          filename.endsWith(".js") ||
+          filename.endsWith(".ts")
+        ) {
+          initialAdd++;
         }
+        if (initialAdd <= expectedTasks) return; // Adds all files initially
 
+        const [_, buildPathDir] = getBuildNames(filename);
+        fs.mkdir(buildPathDir, { recursive: true }, (err) => {
+          if (err) {
+            console.error(err);
+            process.exit(1);
+          }
+
+          rebuild(filename);
+          const [buildFilename] = getBuildNames(filename);
+          console.log(`⚡ added ${buildFilename}`);
+        });
+      });
+      watcher.on("change", (filename) => {
+        rebuild(filename);
+        const [buildFilename] = getBuildNames(filename);
         console.log(`⚡ modified ${buildFilename}`);
+      });
+      watcher.on("unlink", (filename) => {
+        const [buildFilename, buildPathDir] = getBuildNames(filename);
+        fs.rmSync(buildFilename);
+        console.log(`⚡ deleted ${buildFilename}`);
+        const length = fs.readdirSync(buildPathDir).length;
+        if (!length) fs.rmdirSync(buildPathDir);
       });
     }
   }
@@ -271,4 +290,30 @@ function minifyHTML(filename: string, buildFilename: string) {
   });
 
   fs.writeFileSync(buildFilename, fileText);
+}
+
+function rebuild(filename: string) {
+  const [buildFilename] = getBuildNames(filename);
+
+  if (filename.endsWith(".html")) {
+    glob(`${SOURCE_FOLDER}/**/*.html`, {}, (err, files) => {
+      createGlobalJS(err, files);
+      minifyHTML(filename, buildFilename);
+    });
+  } else if (filename.endsWith(".ts") || filename.endsWith(".js")) {
+    minifyTSJS(filename, buildFilename);
+  } else if (filename.endsWith(".css")) {
+    minifyCSS(filename, buildFilename);
+  }
+}
+
+function getBuildNames(filename: string) {
+  const buildFilename = filename.replace(
+    `${SOURCE_FOLDER}\\`,
+    `${BUILD_FOLDER}\\`
+  );
+  const buildFilenameArr = buildFilename.split("\\");
+  buildFilenameArr.pop();
+  const buildPathDir = buildFilenameArr.join("\\");
+  return [buildFilename, buildPathDir];
 }

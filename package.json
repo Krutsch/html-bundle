@@ -1,6 +1,6 @@
 {
   "name": "html-bundle",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A very simple bundler for HTML SFC",
   "type": "module",
   "bin": "./dist/bundle.js",
