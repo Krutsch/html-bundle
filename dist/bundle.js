@@ -8,7 +8,7 @@ import csso from "csso";
 import esbuild from "esbuild";
 import { minify } from "html-minifier";
 const isLive = process.argv.includes("--live");
-// Performance Observer
+// Performance Observer and watcher
 const taskEmitter = new Event.EventEmitter();
 const start = performance.now();
 let expectedTasks = 0; // This will be set in globHandler
@@ -58,8 +58,6 @@ taskEmitter.on("done", () => {
         }
     }
 });
-// Remove old dir
-fs.rmSync("build", { recursive: true, force: true });
 const SOURCE_FOLDER = "src";
 const BUILD_FOLDER = "build";
 const TEMPLATE_LITERAL_MINIFIER = /\n\s+/g;
@@ -72,6 +70,8 @@ const SCRIPT_CONTENT = /<script(\s|.)*?<\/script>/g;
 const UNSCRIPT_START = /<script.*?>/;
 const UNSCRIPT_END = /<\/script>/;
 const STYLE_CONTENT = /<style>(\s|.)*?<\/style>/g;
+// Remove old build dir
+fs.rmSync(BUILD_FOLDER, { recursive: true, force: true });
 // Glob all files and transform the code
 glob(`${SOURCE_FOLDER}/**/*.html`, {}, createGlobalJS); // Create importable and treeshaked esm files that will be imported in HTML
 glob(`${SOURCE_FOLDER}/**/*.html`, {}, globHandler(minifyHTML));

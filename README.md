@@ -18,7 +18,7 @@ $ npm run build
 
 ## Concept
 
-The bundler always globs all HTML, CSS and TS/JS files from the src/ directory and minifies them to the build/ directory. CSSO is being used for minifying CSS files and inline styles, html-minifier for HTML and esbuild for TS/JS. Additionally, TS/JS files and inline scripts will be bundled as esm by esbuild.
+The bundler always globs all HTML, CSS and TS/JS files from the src/ directory and minifies them to the build/ directory. CSSO is being used for minifying CSS files and inline styles, html-minifier for HTML and esbuild for inline and referenced TS/JS. Additionally, TS/JS files and inline scripts will be bundled as esm by esbuild. However, packages in inline script elements will be created in 'build/globals' to re-import them with ease.
 
 ## Example
 
