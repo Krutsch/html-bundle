@@ -38,7 +38,7 @@
   "dependencies": {
     "chokidar": "^3.4.3",
     "csso": "^4.2.0",
-    "esbuild": "^0.8.28",
+    "esbuild": "^0.8.29",
     "glob": "^7.1.6",
     "html-minifier": "^4.0.0"
   }
