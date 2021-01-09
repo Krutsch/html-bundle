@@ -1,6 +1,6 @@
 {
   "name": "html-bundle",
-  "version": "1.0.2",
+  "version": "2.0.0",
   "description": "A very simple bundler for HTML SFC",
   "type": "module",
   "bin": "./dist/bundle.js",
@@ -28,6 +28,7 @@
     "@types/csso": "^3.5.1",
     "@types/glob": "^7.1.3",
     "@types/html-minifier": "^4.0.0",
+    "@types/jscodeshift": "^0.7.2",
     "typescript": "^4.1.3"
   },
   "repository": {
@@ -36,10 +37,12 @@
   },
   "bugs": "https://github.com/Krutsch/html-bundle/issues",
   "dependencies": {
-    "chokidar": "^3.4.3",
+    "chokidar": "^3.5.0",
+    "critical": "^2.0.6",
     "csso": "^4.2.0",
-    "esbuild": "^0.8.29",
+    "esbuild": "^0.8.31",
     "glob": "^7.1.6",
-    "html-minifier": "^4.0.0"
+    "html-minifier": "^4.0.0",
+    "jscodeshift": "^0.11.0"
   }
 }

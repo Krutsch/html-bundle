@@ -2,19 +2,20 @@
 
 > A very simple zero-config bundler for HTML files. The idea is to use HTML as Single File Components, because HTML can already include `<style>` and `<script>` Elements. Additionally, `TypeScript` can be used as inline or referenced script in HTML.
 
-## Disclaimer
-
-- This package relies heavily on `RegEx`. It is probably not production ready and I might have missed an import case.
-
 ## Installation and Usage
 
 ```properties
 $ npm install -D html-bundle
 { ...
-  "build": "html-bundle" // '--live' to keep the process alive
+  "build": "html-bundle" // see flags below
 }
 $ npm run build
 ```
+
+## CLI
+
+`--live`: sets a watcher on the src directory in order to trigger builds on the fly.<br>
+`--critical`: uses [critical](https://www.npmjs.com/package/critical) to extract and inline critical-path CSS to HTML.
 
 ## Concept
 
