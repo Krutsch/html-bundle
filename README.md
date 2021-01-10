@@ -53,10 +53,6 @@ The bundler always globs all HTML, CSS and TS/JS files from the src/ directory a
 
 ![Output](output.JPG)
 
-## Further
-
-The `--live` flag can be combined nicely with live-server and `<base> element`. If you want to dodge the `<base> element`, then npm package 'serve' would be a good alternative — with or without a file watcher.
-
 ## Roadmap
 
 - VSCode Plugin for highlighting TypeScript in HTML
