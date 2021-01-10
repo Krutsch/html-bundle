@@ -15,7 +15,7 @@ $ npm run build
 ## CLI
 
 `--live`: sets a watcher on the src directory in order to trigger builds on the fly.<br>
-`--critical`: uses [critical](https://www.npmjs.com/package/critical) to extract and inline critical-path CSS to HTML.
+`--critical`: uses [critical](https://www.npmjs.com/package/critical) to extract and inline critical-path CSS to HTML. <em>This will not work with '--live'.</em>
 
 ## Concept
 

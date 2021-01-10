@@ -20,7 +20,7 @@ let finishedTasks = 0;
 taskEmitter.on("done", () => {
     finishedTasks++;
     if (finishedTasks === expectedTasks) {
-        fs.rmdirSync(`${BUILD_FOLDER}/tmp`);
+        fs.rmSync(`${BUILD_FOLDER}/tmp`, { recursive: true, force: true });
         console.log(`🚀 Build finished in ${(performance.now() - start).toFixed(2)}ms ✨`);
         // Watch for changes
         if (isLive) {
@@ -218,12 +218,7 @@ function createGlobalJS(err, files) {
                 minify: true,
                 outfile: outfileGLOBAL,
             })
-                .then((x) => {
-                // Remove TS file
-                fs.rm(outfileTMP, (err) => {
-                    if (err)
-                        throw err;
-                });
+                .then(() => {
                 // Minify whitespace
                 fs.readFile(outfileGLOBAL.replace(".ts", ".js"), { encoding: "utf-8" }, (err, fileText) => {
                     if (err)
@@ -297,14 +292,7 @@ function minifyHTML(filename, buildFilename) {
         fileText = minify(fileText, {
             collapseWhitespace: true,
         });
-        if (!isCritical) {
-            fs.writeFile(buildFilename, fileText, (err) => {
-                if (err)
-                    throw err;
-                taskEmitter.emit("done");
-            });
-        }
-        else {
+        if (isCritical && !isLive) {
             const buildFilenameArr = buildFilename.split("/");
             const fileWithBase = buildFilenameArr.pop();
             const buildDir = buildFilenameArr.join("/");
@@ -318,6 +306,13 @@ function minifyHTML(filename, buildFilename) {
                 rebase: () => { },
             });
             taskEmitter.emit("done");
+        }
+        else {
+            fs.writeFile(buildFilename, fileText, (err) => {
+                if (err)
+                    throw err;
+                taskEmitter.emit("done");
+            });
         }
     });
 }
