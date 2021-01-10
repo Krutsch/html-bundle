@@ -19,7 +19,7 @@ $ npm run build
 
 ## Concept
 
-The bundler always globs all HTML, CSS and TS/JS files from the src/ directory and minifies them to the build/ directory. CSSO is being used for minifying CSS files and inline styles, html-minifier for HTML and esbuild for inline and referenced TS/JS. Additionally, TS/JS files and inline scripts will be bundled as esm by esbuild. However, packages in inline script elements will be created in 'build/globals' to re-import them with ease.
+The bundler always globs all HTML, CSS and TS/JS files from the src/ directory and minifies them to the build/ directory. CSSO is being used for minifying CSS files and inline styles, html-minifier for HTML and esbuild for inline and referenced TS/JS. Additionally, TS/JS files and inline scripts will be bundled as esm by esbuild. However, packages in inline script elements will be created in 'build/globals' to re-import them with ease. This works for dynamic import too!
 
 ## Example
 
@@ -52,6 +52,10 @@ The bundler always globs all HTML, CSS and TS/JS files from the src/ directory a
 ### Output
 
 ![Output](output.JPG)
+
+## Further
+
+The `--live` flag can be combined nicely with live-server and `<base> element`. If you want to dodge the `<base> element`, then npm package 'serve' would be a good alternative — with or without a file watcher.
 
 ## Roadmap
 

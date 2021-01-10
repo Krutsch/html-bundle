@@ -91,6 +91,7 @@ const BUILD_FOLDER = "build";
 const TEMPLATE_LITERAL_MINIFIER = /\n\s+/g;
 const SCRIPT_CONTENT = /(?<=<script)(\s|.)*?(?=<\/script>)/g;
 const STYLE_CONTENT = /(?<=<style)(\s|.)*?(?=<\/style>)/g;
+const DYNAMIC_IMPORT = /(?<=import\([`'"]).*?(?=[`'"])/g;
 
 // Remove old build dir
 fs.rmSync(BUILD_FOLDER, { recursive: true, force: true });
@@ -153,35 +154,47 @@ function createGlobalJS(err: globCB[0], files: globCB[1]) {
 
     fileText.match(SCRIPT_CONTENT)?.forEach((script) => {
       let src = script.slice(script.indexOf(">") + 1).trim();
+      const ast = tscodeshift(src);
 
-      tscodeshift(src)
-        .find(jscodeshift.ImportDeclaration)
-        .forEach((path) => {
-          const { source, specifiers } = path.value;
-          const pkg = source.value as string;
-          if (pkg.startsWith(".")) return; // File will be transformed already
+      ast.find(jscodeshift.ImportDeclaration).forEach((path) => {
+        const { source, specifiers } = path.value;
+        const pkg = source.value as string;
+        if (pkg.startsWith(".")) return; // File will be transformed already
 
-          if (HTMLCodeDependencies.has(pkg)) {
-            HTMLCodeDependencies.get(pkg).push(...specifiers);
-          } else {
-            HTMLCodeDependencies.set(pkg, specifiers);
-          }
-        });
+        if (HTMLCodeDependencies.has(pkg)) {
+          HTMLCodeDependencies.get(pkg).push(...specifiers);
+        } else {
+          HTMLCodeDependencies.set(pkg, specifiers);
+        }
+      });
 
-      tscodeshift(src)
-        .find(jscodeshift.ImportExpression)
-        .forEach((path) => {
+      ast.find(jscodeshift.CallExpression).forEach((path) => {
+        const { callee } = path.value;
+        if (callee.type !== "Import") return;
+        //@ts-ignore
+        const dynImportIndex = callee.loc!.tokens.findIndex(
           //@ts-ignore
-          const { source } = path.value;
-          const pkg = source.value as string;
-          if (pkg.startsWith(".")) return; // File will be transformed already
-
-          if (HTMLCodeDependencies.has(pkg)) {
-            HTMLCodeDependencies.get(pkg).push(path);
-          } else {
-            HTMLCodeDependencies.set(pkg, path);
+          (token: any, index: number, arr: typeof callee.loc.tokens) => {
+            return (
+              token.value === "import" &&
+              arr[index + 1].value === "(" &&
+              arr[index + 2].type.label === "string"
+            );
           }
-        });
+        );
+        if (dynImportIndex > -1) {
+          //@ts-ignore
+          const pkgToken = callee.loc!.tokens[dynImportIndex + 2];
+
+          if (pkgToken.value.startsWith(".")) return; // File will be transformed already
+
+          if (HTMLCodeDependencies.has(pkgToken.value)) {
+            HTMLCodeDependencies.get(pkgToken.value).push(pkgToken);
+          } else {
+            HTMLCodeDependencies.set(pkgToken.value, [pkgToken]);
+          }
+        }
+      });
     });
   });
 
@@ -198,10 +211,6 @@ function createGlobalJS(err: globCB[0], files: globCB[1]) {
 
     specifiers.forEach((specifier: SpecifierType, index: number) => {
       switch (specifier.type) {
-        //@ts-ignore
-        case "ImportExpression":
-          content += `* as defaultImp`;
-          break;
         case "ImportNamespaceSpecifier":
           //@ts-ignore
           content += `* as ${specifier.local.name}`;
@@ -242,6 +251,10 @@ function createGlobalJS(err: globCB[0], files: globCB[1]) {
           if (index === specifiers.length - 1) {
             content += "}";
           }
+          break;
+        default:
+          // TokenType - dynamic import
+          content = `export *`;
           break;
       }
 
@@ -332,10 +345,12 @@ function minifyHTML(filename: string, buildFilename: string) {
         .find(jscodeshift.ImportDeclaration)
         .forEach(moduleToLocal)
         .toSource();
-      src = tscodeshift(src)
-        .find(jscodeshift.ImportExpression)
-        .forEach(moduleToLocal)
-        .toSource();
+
+      // Changing it on the AST does not work?
+      src = src.replace(
+        DYNAMIC_IMPORT,
+        (pkgName: string) => `./globals/${pkgName}.js`
+      );
 
       const transpiled = esbuild.transformSync(src, {
         charset: "utf8",
