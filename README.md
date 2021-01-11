@@ -55,4 +55,5 @@ The bundler always globs all HTML, CSS and TS/JS files from the src/ directory a
 
 ## Roadmap
 
-- VSCode Plugin for highlighting TypeScript in HTML
+- Treeshake dynamic imports
+- VSCode Plugin for TypeScript Support in HTML
