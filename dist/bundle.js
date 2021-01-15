@@ -8,8 +8,13 @@ import csso from "csso";
 import esbuild from "esbuild";
 import critical from "critical";
 import { minify } from "html-minifier";
-import jscodeshift from "jscodeshift";
-const tscodeshift = jscodeshift.withParser("ts");
+import { parse } from "@babel/parser";
+import babelTraverse from "@babel/traverse";
+import babelGenerate from "@babel/generator";
+// @ts-ignore
+const traverse = babelTraverse.default;
+// @ts-ignore
+const generate = babelGenerate.default;
 const isLive = process.argv.includes("--live");
 const isCritical = process.argv.includes("--critical");
 // Performance Observer and watcher
@@ -121,46 +126,47 @@ function createGlobalJS(err, files) {
         const fileText = fs.readFileSync(filename, { encoding: "utf-8" });
         fileText.match(SCRIPT_CONTENT)?.forEach((script) => {
             let src = script.slice(script.indexOf(">") + 1).trim();
-            const ast = tscodeshift(src);
-            ast.find(jscodeshift.ImportDeclaration).forEach((path) => {
-                const { source, specifiers } = path.value;
-                const pkg = source.value;
-                if (pkg.startsWith("."))
-                    return; // File will be transformed already
-                if (HTMLCodeDependencies.has(pkg)) {
-                    HTMLCodeDependencies.get(pkg).push(...specifiers);
-                }
-                else {
-                    HTMLCodeDependencies.set(pkg, specifiers);
-                }
+            const ast = parse(src, {
+                sourceType: "module",
+                plugins: ["typescript", "topLevelAwait"],
             });
-            ast.find(jscodeshift.CallExpression).forEach((path) => {
-                const { callee } = path.value;
-                if (callee.type !== "Import")
-                    return;
-                //@ts-ignore
-                const dynImportIndex = callee.loc.tokens.findIndex(
-                //@ts-ignore
-                (token, index, arr) => {
-                    return (token.value === "import" &&
-                        arr[index + 1].value === "(" &&
-                        arr[index + 2].type.label === "string");
-                });
-                if (dynImportIndex > -1) {
-                    //@ts-ignore
-                    const pkgToken = callee.loc.tokens[dynImportIndex + 2];
-                    if (pkgToken.value.startsWith("."))
+            traverse(ast, {
+                ImportDeclaration({ node }) {
+                    const { specifiers, source } = node;
+                    const pkg = source.value;
+                    if (pkg.startsWith("."))
                         return; // File will be transformed already
-                    if (HTMLCodeDependencies.has(pkgToken.value)) {
-                        HTMLCodeDependencies.get(pkgToken.value).push(pkgToken);
+                    if (HTMLCodeDependencies.has(pkg)) {
+                        HTMLCodeDependencies.get(pkg).push(...specifiers);
                     }
                     else {
-                        HTMLCodeDependencies.set(pkgToken.value, [pkgToken]);
+                        HTMLCodeDependencies.set(pkg, specifiers);
                     }
-                }
+                },
+                CallExpression({ node }) {
+                    const { callee } = node;
+                    if (callee.type !== "Import")
+                        return;
+                    const calleeArgument = node.arguments.find((item) => item.type === "StringLiteral");
+                    if (!calleeArgument) {
+                        console.error("Package name should be a string!");
+                        process.exit(1);
+                    }
+                    //@ts-ignore Cannot get the type
+                    const pkg = calleeArgument.value;
+                    if (pkg.startsWith("."))
+                        return; // File will be transformed already
+                    if (HTMLCodeDependencies.has(pkg)) {
+                        HTMLCodeDependencies.get(pkg).push(pkg);
+                    }
+                    else {
+                        HTMLCodeDependencies.set(pkg, [pkg]);
+                    }
+                },
             });
         });
     });
+    // Create importable TS files
     const importSpecifierSet = new Set();
     HTMLCodeDependencies.forEach((specifiers, pkg) => {
         importSpecifierSet.clear();
@@ -168,28 +174,24 @@ function createGlobalJS(err, files) {
         specifiers.forEach((specifier, index) => {
             switch (specifier.type) {
                 case "ImportNamespaceSpecifier":
-                    //@ts-ignore
                     content += `* as ${specifier.local.name}`;
                     break;
                 case "ImportDefaultSpecifier":
                     importSpecifierSet.add("default");
                 case "ImportSpecifier":
-                    // @ts-ignore
+                    // @ts-ignore ...
                     const name = specifier.imported?.name || "default";
                     const lastSize = importSpecifierSet.size;
                     importSpecifierSet.add(name);
-                    // @ts-ignore
                     specifier.local && importSpecifierSet.add(specifier.local.name);
                     if (lastSize === 0 || (lastSize === 1 && name === "default")) {
                         content += "{";
                     }
                     if (lastSize !== importSpecifierSet.size) {
                         content += name;
-                        // @ts-ignore
                         if (specifier.local &&
                             specifier.local.name !== name &&
                             name !== "default") {
-                            //@ts-ignore
                             content += ` as ${specifier.local.name}`;
                         }
                         if (index !== specifiers.length - 1) {
@@ -275,12 +277,30 @@ function minifyHTML(filename, buildFilename) {
         fileText.match(SCRIPT_CONTENT)?.forEach((script) => {
             const source = script.slice(script.indexOf(">") + 1).trim();
             let src = source;
-            src = tscodeshift(src)
-                .find(jscodeshift.ImportDeclaration)
-                .forEach(moduleToLocal)
-                .toSource();
-            // Changing it on the AST does not work?
-            src = src.replace(DYNAMIC_IMPORT, (pkgName) => `./globals/${pkgName}.js`);
+            const ast = parse(src, {
+                sourceType: "module",
+                plugins: ["typescript", "topLevelAwait"],
+            });
+            traverse(ast, {
+                ImportDeclaration({ node }) {
+                    const { source } = node;
+                    const pkg = source.value;
+                    if (!pkg.startsWith(".")) {
+                        source.value = `./globals/${pkg}.js`;
+                    }
+                },
+                CallExpression({ node }) {
+                    const { callee } = node;
+                    if (callee.type !== "Import")
+                        return;
+                    const calleeArgument = node.arguments.find((item) => item.type === "StringLiteral");
+                    const pkg = calleeArgument.value;
+                    if (!pkg.startsWith(".")) {
+                        calleeArgument.value = `./globals/${pkg}.js`;
+                    }
+                },
+            });
+            src = generate(ast).code;
             const transpiled = esbuild.transformSync(src, {
                 charset: "utf8",
                 color: true,
@@ -323,14 +343,6 @@ function minifyHTML(filename, buildFilename) {
             });
         }
     });
-}
-function moduleToLocal(path) {
-    //@ts-ignore
-    const { source } = path.value;
-    const pkg = source.value;
-    if (!pkg.startsWith(".")) {
-        source.value = `./globals/${source.value}.js`;
-    }
 }
 function rebuild(filename) {
     const [buildFilename] = getBuildNames(filename);
