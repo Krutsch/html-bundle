@@ -12,6 +12,9 @@ import { minify } from "html-minifier";
 import { parse } from "@babel/parser";
 import babelTraverse, { Node } from "@babel/traverse";
 import babelGenerate from "@babel/generator";
+import ts from "typescript";
+import path, { dirname } from "path";
+import { fileURLToPath } from "url";
 
 // @ts-ignore
 const traverse = babelTraverse.default as typeof babelTraverse;
@@ -331,6 +334,8 @@ function minifyHTML(filename: string, buildFilename: string) {
       const source = script.slice(script.indexOf(">") + 1).trim();
       let src = source;
 
+      diagnoseTS(src, filename.replace(".html", ".ts"));
+
       const ast = parse(src, {
         sourceType: "module",
         plugins: ["typescript", "topLevelAwait"],
@@ -433,4 +438,51 @@ function getBuildNames(filename: string) {
   buildFilenameArr.pop();
   const buildPathDir = buildFilenameArr.join("\\");
   return [buildFilename, buildPathDir];
+}
+
+function diagnoseTS(code: string, filename: string) {
+  const options = ts.getDefaultCompilerOptions();
+  const inMemoryFilePath = path.resolve(
+    path.join(dirname(fileURLToPath(import.meta.url)), filename)
+  );
+  const AST = ts.createSourceFile(
+    inMemoryFilePath,
+    code,
+    ts.ScriptTarget.Latest
+  );
+  const host = ts.createCompilerHost(options, true);
+
+  overrideIfInMemoryFile("getSourceFile", AST);
+  overrideIfInMemoryFile("readFile", code);
+  overrideIfInMemoryFile("fileExists", true);
+
+  const program = ts.createProgram({
+    options,
+    rootNames: [inMemoryFilePath],
+    host,
+  });
+  const allDiagnostics = ts.getPreEmitDiagnostics(program, AST);
+  allDiagnostics.forEach((diagnostic) => {
+    if (diagnostic.messageText) {
+      console.log(
+        `TS: "${
+          diagnostic.messageText
+        }"\n\tnear code: ${diagnostic.file!.text.slice(
+          diagnostic.start,
+          diagnostic.start! + diagnostic.length!
+        )}`
+      );
+    }
+  });
+
+  function overrideIfInMemoryFile(methodName: string, inMemoryValue: any) {
+    //@ts-ignore
+    const originalMethod = host[methodName];
+    //@ts-ignore
+    host[methodName] = (...args: string[]) => {
+      const filePath = path.resolve(args[0]);
+      if (filePath === inMemoryFilePath) return inMemoryValue;
+      return originalMethod.apply(host, args);
+    };
+  }
 }
