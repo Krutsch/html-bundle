@@ -20,6 +20,7 @@ const traverse = babelTraverse.default;
 const generate = babelGenerate.default;
 const isLive = process.argv.includes("--live");
 const isCritical = process.argv.includes("--critical");
+const isRouterCompat = process.argv.includes("--router-compat");
 // Performance Observer and watcher
 const taskEmitter = new Event.EventEmitter();
 const start = performance.now();
@@ -37,6 +38,7 @@ taskEmitter.on("done", () => {
             // The add watcher will add all the files initially - do not watch them
             let initialAdd = 0;
             watcher.on("add", (filename) => {
+                filename = String.raw `${filename}`.replace(/\\/g, "/");
                 if (filename.endsWith(".html") ||
                     filename.endsWith(".css") ||
                     filename.endsWith(".js") ||
@@ -56,11 +58,13 @@ taskEmitter.on("done", () => {
                 });
             });
             watcher.on("change", (filename) => {
+                filename = String.raw `${filename}`.replace(/\\/g, "/");
                 rebuild(filename);
                 const [buildFilename] = getBuildNames(filename);
                 console.log(`⚡ modified ${buildFilename}`);
             });
             watcher.on("unlink", (filename) => {
+                filename = String.raw `${filename}`.replace(/\\/g, "/");
                 const [buildFilename, buildPathDir] = getBuildNames(filename);
                 fs.rm(buildFilename, (err) => {
                     if (err)
@@ -100,10 +104,7 @@ function globHandler(minifyFn) {
         }
         expectedTasks += files.length;
         files.forEach((filename) => {
-            const buildFilename = filename.replace(`${SOURCE_FOLDER}/`, `${BUILD_FOLDER}/`);
-            const buildFilenameArr = buildFilename.split("/");
-            buildFilenameArr.pop(); // In order to create the dir
-            const buildPathDir = buildFilenameArr.join("/");
+            const [buildFilename, buildPathDir] = getBuildNames(filename);
             fs.mkdir(buildPathDir, { recursive: true }, (err) => {
                 if (err) {
                     console.error(err);
@@ -138,11 +139,14 @@ function createGlobalJS(err, files) {
                     const pkg = source.value;
                     if (pkg.startsWith("."))
                         return; // File will be transformed already
+                    const betterSpecifiers = specifiers.length
+                        ? specifiers
+                        : [{ type: "ImportSideEffectSpecifier" }]; // import "module-name"
                     if (HTMLCodeDependencies.has(pkg)) {
-                        HTMLCodeDependencies.get(pkg).push(...specifiers);
+                        HTMLCodeDependencies.get(pkg).push(...betterSpecifiers);
                     }
                     else {
-                        HTMLCodeDependencies.set(pkg, specifiers);
+                        HTMLCodeDependencies.set(pkg, betterSpecifiers);
                     }
                 },
                 CallExpression({ node }) {
@@ -158,11 +162,12 @@ function createGlobalJS(err, files) {
                     const pkg = calleeArgument.value;
                     if (pkg.startsWith("."))
                         return; // File will be transformed already
+                    const specifier = { type: "ImportDynamicSpecifier" };
                     if (HTMLCodeDependencies.has(pkg)) {
-                        HTMLCodeDependencies.get(pkg).push(pkg);
+                        HTMLCodeDependencies.get(pkg).push(specifier);
                     }
                     else {
-                        HTMLCodeDependencies.set(pkg, [pkg]);
+                        HTMLCodeDependencies.set(pkg, [specifier]);
                     }
                 },
             });
@@ -172,51 +177,42 @@ function createGlobalJS(err, files) {
     const importSpecifierSet = new Set();
     HTMLCodeDependencies.forEach((specifiers, pkg) => {
         importSpecifierSet.clear();
+        // Strategy in ./importExportStrategy
         let content = "export ";
-        specifiers.forEach((specifier, index) => {
-            switch (specifier.type) {
-                case "ImportNamespaceSpecifier":
-                    content += `* as ${specifier.local.name}`;
-                    break;
-                case "ImportDefaultSpecifier":
-                    importSpecifierSet.add("default");
-                case "ImportSpecifier":
-                    // @ts-ignore ...
-                    const name = specifier.imported?.name || "default";
-                    const lastSize = importSpecifierSet.size;
-                    importSpecifierSet.add(name);
-                    specifier.local && importSpecifierSet.add(specifier.local.name);
-                    if (lastSize === 0 || (lastSize === 1 && name === "default")) {
-                        content += "{";
-                    }
-                    if (lastSize !== importSpecifierSet.size) {
-                        content += name;
-                        if (specifier.local &&
-                            specifier.local.name !== name &&
-                            name !== "default") {
-                            content += ` as ${specifier.local.name}`;
-                        }
-                        if (index !== specifiers.length - 1) {
-                            content += ",";
-                        }
-                    }
-                    if (index === specifiers.length - 1) {
-                        content += "}";
-                    }
-                    break;
-                default:
-                    // TokenType - dynamic import
-                    content = `export *`;
-                    break;
-            }
-            // Last iteration
-            if (index === specifiers.length - 1) {
-                content += ` from "${pkg}";`;
+        const hasImportDefault = specifiers.some((node) => node.type === "ImportDefaultSpecifier");
+        if (hasImportDefault) {
+            content += "{ default";
+        }
+        const skipConditions = specifiers.some((node) => [
+            "ImportNamespaceSpecifier",
+            "ImportSideEffectSpecifier",
+            "ImportDynamicSpecifier",
+        ].includes(node.type));
+        if (skipConditions) {
+            content = "export * ";
+            specifiers = [];
+        }
+        specifiers
+            .filter((node) => node.type === "ImportSpecifier")
+            .forEach((node) => {
+            //@ts-ignore
+            const name = node.imported.name;
+            const lastSize = importSpecifierSet.size;
+            importSpecifierSet.add(name);
+            if (lastSize !== importSpecifierSet.size) {
+                if (content.includes("{")) {
+                    content += ", ";
+                }
+                else {
+                    content += "{ ";
+                }
+                content += name;
             }
         });
-        if (specifiers.length === 0) {
-            content = `import "${pkg}"`;
+        if (content.includes("{") && !content.includes("}")) {
+            content += " } ";
         }
+        content += `from "${pkg}";`;
         const outfileTMP = `${BUILD_FOLDER}/tmp/${pkg}.ts`;
         const outfileGLOBAL = `${BUILD_FOLDER}/globals/${pkg}.js`;
         fs.writeFile(outfileTMP, content, (err) => {
@@ -228,6 +224,7 @@ function createGlobalJS(err, files) {
                 .build({
                 entryPoints: [outfileTMP],
                 format: "esm",
+                charset: "utf8",
                 bundle: true,
                 minify: true,
                 outfile: outfileGLOBAL,
@@ -245,11 +242,13 @@ function createGlobalJS(err, files) {
             });
         });
     });
+    HTMLCodeDependencies.clear();
 }
 function minifyTSJS(filename, buildFilename) {
     esbuild
         .build({
         entryPoints: [filename],
+        charset: "utf8",
         format: "esm",
         bundle: true,
         minify: true,
@@ -279,7 +278,9 @@ function minifyHTML(filename, buildFilename) {
         fileText.match(SCRIPT_CONTENT)?.forEach((script) => {
             const source = script.slice(script.indexOf(">") + 1).trim();
             let src = source;
-            diagnoseTS(src, filename.replace(".html", ".ts"));
+            if (src.includes("@ts-check")) {
+                diagnoseTS(src, filename.replace(".html", ".ts"));
+            }
             const ast = parse(src, {
                 sourceType: "module",
                 plugins: ["typescript", "topLevelAwait"],
@@ -289,7 +290,13 @@ function minifyHTML(filename, buildFilename) {
                     const { source } = node;
                     const pkg = source.value;
                     if (!pkg.startsWith(".")) {
-                        source.value = `./globals/${pkg}.js`;
+                        if (isRouterCompat) {
+                            source.value = `./globals/${pkg}.js`;
+                        }
+                        else {
+                            const dirUpCount = filename.split("/").length - 2;
+                            source.value = `${"../".repeat(dirUpCount)}${dirUpCount ? "" : "./"}globals/${pkg}.js`;
+                        }
                     }
                 },
                 CallExpression({ node }) {
@@ -299,14 +306,19 @@ function minifyHTML(filename, buildFilename) {
                     const calleeArgument = node.arguments.find((item) => item.type === "StringLiteral");
                     const pkg = calleeArgument.value;
                     if (!pkg.startsWith(".")) {
-                        calleeArgument.value = `./globals/${pkg}.js`;
+                        if (isRouterCompat) {
+                            calleeArgument.value = `./globals/${pkg}.js`;
+                        }
+                        else {
+                            const dirUpCount = filename.split("/").length - 2;
+                            calleeArgument.value = `${"../".repeat(dirUpCount)}${dirUpCount ? "" : "./"}globals/${pkg}.js`;
+                        }
                     }
                 },
             });
             src = generate(ast).code;
             const transpiled = esbuild.transformSync(src, {
                 charset: "utf8",
-                color: true,
                 loader: "ts",
                 format: "esm",
                 minify: true,
@@ -363,10 +375,10 @@ function rebuild(filename) {
     }
 }
 function getBuildNames(filename) {
-    const buildFilename = filename.replace(`${SOURCE_FOLDER}\\`, `${BUILD_FOLDER}\\`);
-    const buildFilenameArr = buildFilename.split("\\");
+    const buildFilename = filename.replace(`${SOURCE_FOLDER}/`, `${BUILD_FOLDER}/`);
+    const buildFilenameArr = buildFilename.split("/");
     buildFilenameArr.pop();
-    const buildPathDir = buildFilenameArr.join("\\");
+    const buildPathDir = buildFilenameArr.join("/");
     return [buildFilename, buildPathDir];
 }
 function diagnoseTS(code, filename) {

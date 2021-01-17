@@ -1,0 +1,30 @@
+Corresponding export to import
+import defaultExport from "module-name";
+export { default } from "module-name";
+
+import * as name from "module-name";
+export * from "module-name";
+
+import { export1 } from "module-name";
+export { export1 } from "module-name";
+
+import { export2 as alias1 } from "module-name";
+export { export2 } from "module-name";
+
+import { export3, export4 } from "module-name";
+export { export3, export4 } from "module-name";
+
+import { foo, bar } from "module-name/path/to/specific/un-exported/file";
+export { foo, bar } from "module-name/path/to/specific/un-exported/file";
+
+import defaultExporta, { export5 } from "module-name";
+export { default, export5 } from "module-name";
+
+import defaultExportu, * as name2 from "module-name";
+export { default } from "module-name";
+
+import "module-name";
+export * from "module-name";
+
+import("module-name");
+export * from "module-name";

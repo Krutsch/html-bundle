@@ -12,9 +12,12 @@ $ npm install -D html-bundle
 $ npm run build
 ```
 
-## CLI
+## CLI and Usage
+
+In order to enable TypeScript diagnose information for HTML, use the comment @ts-check in script module.
 
 `--live`: sets a watcher on the src directory in order to trigger builds on the fly.<br>
+`--router-compat`: import paths will always start from the root. This is useful for SPA router<br>
 `--critical`: uses [critical](https://www.npmjs.com/package/critical) to extract and inline critical-path CSS to HTML. <em>This will not work with '--live'.</em>
 
 ## Concept
