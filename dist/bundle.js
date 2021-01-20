@@ -3,24 +3,11 @@ import fs from "fs";
 import { performance } from "perf_hooks";
 import Event from "events";
 import glob from "glob";
-import { watch } from "chokidar";
 import csso from "csso";
 import esbuild from "esbuild";
 import critical from "critical";
 import { minify } from "html-minifier";
-import { parse } from "@babel/parser";
-import babelTraverse from "@babel/traverse";
-import babelGenerate from "@babel/generator";
-import ts from "typescript";
-import path, { dirname } from "path";
-import { fileURLToPath } from "url";
-// @ts-ignore
-const traverse = babelTraverse.default;
-// @ts-ignore
-const generate = babelGenerate.default;
-const isLive = process.argv.includes("--live");
 const isCritical = process.argv.includes("--critical");
-const isRouterCompat = process.argv.includes("--router-compat");
 // Performance Observer and watcher
 const taskEmitter = new Event.EventEmitter();
 const start = performance.now();
@@ -29,56 +16,7 @@ let finishedTasks = 0;
 taskEmitter.on("done", () => {
     finishedTasks++;
     if (finishedTasks === expectedTasks) {
-        fs.rmSync(`${BUILD_FOLDER}/tmp`, { recursive: true, force: true });
         console.log(`🚀 Build finished in ${(performance.now() - start).toFixed(2)}ms ✨`);
-        // Watch for changes
-        if (isLive) {
-            console.log(`⌛ Waiting for file changes ...`);
-            const watcher = watch(SOURCE_FOLDER);
-            // The add watcher will add all the files initially - do not watch them
-            let initialAdd = 0;
-            watcher.on("add", (filename) => {
-                filename = String.raw `${filename}`.replace(/\\/g, "/");
-                if (filename.endsWith(".html") ||
-                    filename.endsWith(".css") ||
-                    filename.endsWith(".js") ||
-                    filename.endsWith(".ts")) {
-                    initialAdd++;
-                }
-                if (initialAdd <= expectedTasks)
-                    return;
-                const [buildFilename, buildPathDir] = getBuildNames(filename);
-                fs.mkdir(buildPathDir, { recursive: true }, (err) => {
-                    if (err) {
-                        console.error(err);
-                        process.exit(1);
-                    }
-                    rebuild(filename);
-                    console.log(`⚡ added ${buildFilename}`);
-                });
-            });
-            watcher.on("change", (filename) => {
-                filename = String.raw `${filename}`.replace(/\\/g, "/");
-                rebuild(filename);
-                const [buildFilename] = getBuildNames(filename);
-                console.log(`⚡ modified ${buildFilename}`);
-            });
-            watcher.on("unlink", (filename) => {
-                filename = String.raw `${filename}`.replace(/\\/g, "/");
-                const [buildFilename, buildPathDir] = getBuildNames(filename);
-                fs.rm(buildFilename, (err) => {
-                    if (err)
-                        throw err;
-                    console.log(`⚡ deleted ${buildFilename}`);
-                    const length = fs.readdirSync(buildPathDir).length;
-                    if (!length)
-                        fs.rmdir(buildPathDir, () => {
-                            if (err)
-                                throw err;
-                        });
-                });
-            });
-        }
     }
 });
 const SOURCE_FOLDER = "src";
@@ -103,8 +41,16 @@ function globHandler(minifyFn) {
             process.exit(1);
         }
         expectedTasks += files.length;
+        if (files.length &&
+            (files[0].endsWith(".ts") || files[0].endsWith(".js"))) {
+            minifyFn(files);
+            return;
+        }
         files.forEach((filename) => {
-            const [buildFilename, buildPathDir] = getBuildNames(filename);
+            const buildFilename = filename.replace(`${SOURCE_FOLDER}/`, `${BUILD_FOLDER}/`);
+            const buildFilenameArr = buildFilename.split("/");
+            buildFilenameArr.pop();
+            const buildPathDir = buildFilenameArr.join("/");
             fs.mkdir(buildPathDir, { recursive: true }, (err) => {
                 if (err) {
                     console.error(err);
@@ -115,144 +61,66 @@ function globHandler(minifyFn) {
         });
     };
 }
-const HTMLCodeDependencies = new Map();
 function createGlobalJS(err, files) {
     if (err) {
         console.error(err);
         process.exit(1);
     }
     // Create folders
-    fs.mkdirSync(`${BUILD_FOLDER}/tmp`, { recursive: true }); // for esbuild
-    fs.mkdirSync(`${BUILD_FOLDER}/globals`, { recursive: true });
-    // Glob all import statements in order to create one global importable file for each package
+    fs.mkdirSync(BUILD_FOLDER, { recursive: true });
+    // Glob all inline scripts and create importable files
+    const scriptFilenames = [];
     files.forEach((filename) => {
         const fileText = fs.readFileSync(filename, { encoding: "utf-8" });
-        fileText.match(SCRIPT_CONTENT)?.forEach((script) => {
-            let src = script.slice(script.indexOf(">") + 1).trim();
-            const ast = parse(src, {
-                sourceType: "module",
-                plugins: ["typescript", "topLevelAwait"],
-            });
-            traverse(ast, {
-                ImportDeclaration({ node }) {
-                    const { specifiers, source } = node;
-                    const pkg = source.value;
-                    if (pkg.startsWith("."))
-                        return; // File will be transformed already
-                    const betterSpecifiers = specifiers.length
-                        ? specifiers
-                        : [{ type: "ImportSideEffectSpecifier" }]; // import "module-name"
-                    if (HTMLCodeDependencies.has(pkg)) {
-                        HTMLCodeDependencies.get(pkg).push(...betterSpecifiers);
-                    }
-                    else {
-                        HTMLCodeDependencies.set(pkg, betterSpecifiers);
-                    }
-                },
-                CallExpression({ node }) {
-                    const { callee } = node;
-                    if (callee.type !== "Import")
-                        return;
-                    const calleeArgument = node.arguments.find((item) => item.type === "StringLiteral");
-                    if (!calleeArgument) {
-                        console.error("Package name should be a string!");
-                        process.exit(1);
-                    }
-                    //@ts-ignore Cannot get the type
-                    const pkg = calleeArgument.value;
-                    if (pkg.startsWith("."))
-                        return; // File will be transformed already
-                    const specifier = { type: "ImportDynamicSpecifier" };
-                    if (HTMLCodeDependencies.has(pkg)) {
-                        HTMLCodeDependencies.get(pkg).push(specifier);
-                    }
-                    else {
-                        HTMLCodeDependencies.set(pkg, [specifier]);
-                    }
-                },
-            });
-        });
-    });
-    // Create importable TS files
-    const importSpecifierSet = new Set();
-    HTMLCodeDependencies.forEach((specifiers, pkg) => {
-        importSpecifierSet.clear();
-        // Strategy in ./importExportStrategy
-        let content = "export ";
-        const hasImportDefault = specifiers.some((node) => node.type === "ImportDefaultSpecifier");
-        if (hasImportDefault) {
-            content += "{ default";
-        }
-        const skipConditions = specifiers.some((node) => [
-            "ImportNamespaceSpecifier",
-            "ImportSideEffectSpecifier",
-            "ImportDynamicSpecifier",
-        ].includes(node.type));
-        if (skipConditions) {
-            content = "export * ";
-            specifiers = [];
-        }
-        specifiers
-            .filter((node) => node.type === "ImportSpecifier")
-            .forEach((node) => {
-            //@ts-ignore
-            const name = node.imported.name;
-            const lastSize = importSpecifierSet.size;
-            importSpecifierSet.add(name);
-            if (lastSize !== importSpecifierSet.size) {
-                if (content.includes("{")) {
-                    content += ", ";
-                }
-                else {
-                    content += "{ ";
-                }
-                content += name;
+        fileText.match(SCRIPT_CONTENT)?.forEach((script, index) => {
+            const src = script.slice(script.indexOf(">") + 1).trim();
+            let buildFilename = filename
+                .slice(filename.indexOf("src/") + 4)
+                .replace(".html", `-${index}.ts`);
+            const buildFilenameArr = buildFilename.split("/");
+            buildFilenameArr.pop();
+            if (buildFilenameArr.length) {
+                const buildPathDir = buildFilenameArr.join("/");
+                fs.mkdirSync(buildPathDir, { recursive: true });
             }
-        });
-        if (content.includes("{") && !content.includes("}")) {
-            content += " } ";
-        }
-        content += `from "${pkg}";`;
-        const outfileTMP = `${BUILD_FOLDER}/tmp/${pkg}.ts`;
-        const outfileGLOBAL = `${BUILD_FOLDER}/globals/${pkg}.js`;
-        fs.writeFile(outfileTMP, content, (err) => {
-            if (err)
-                throw err;
-            // Bundle TS to JS files
-            // This has to happen on the fs, because esbuild does not support stdin in combination with module resolution
-            esbuild
-                .build({
-                entryPoints: [outfileTMP],
-                format: "esm",
-                charset: "utf8",
-                bundle: true,
-                minify: true,
-                outfile: outfileGLOBAL,
-            })
-                .then(() => {
-                // Minify whitespace
-                fs.readFile(outfileGLOBAL.replace(".ts", ".js"), { encoding: "utf-8" }, (err, fileText) => {
-                    if (err)
-                        throw err;
-                    fs.writeFile(outfileGLOBAL.replace(".ts", ".js"), fileText.replace(TEMPLATE_LITERAL_MINIFIER, ""), (err) => {
-                        if (err)
-                            throw err;
-                    });
-                });
-            });
+            scriptFilenames.push(buildFilename);
+            fs.writeFileSync(buildFilename, src);
         });
     });
-    HTMLCodeDependencies.clear();
-}
-function minifyTSJS(filename, buildFilename) {
-    esbuild
-        .build({
-        entryPoints: [filename],
+    esbuild.buildSync({
+        entryPoints: scriptFilenames,
         charset: "utf8",
         format: "esm",
+        splitting: true,
         bundle: true,
         minify: true,
-        outfile: buildFilename.replace(".ts", ".js"),
+        outdir: BUILD_FOLDER,
+    });
+    scriptFilenames.forEach((file) => {
+        fs.rmSync(file);
+        const buildPathArr = file.split("/");
+        buildPathArr.pop();
+        if (buildPathArr.length) {
+            const buildPathDir = buildPathArr.join("/");
+            const length = fs.readdirSync(buildPathDir).length;
+            if (!length)
+                fs.rmdir(buildPathDir, () => {
+                    if (err)
+                        throw err;
+                });
+        }
+    });
+}
+function minifyTSJS(files) {
+    esbuild
+        .build({
+        entryPoints: files,
+        charset: "utf8",
+        format: "esm",
+        splitting: true,
+        bundle: true,
+        minify: true,
+        outdir: BUILD_FOLDER,
     })
         .then(() => {
         taskEmitter.emit("done");
@@ -274,57 +142,15 @@ function minifyHTML(filename, buildFilename) {
         if (err)
             throw err;
         // Minify Code
-        // Transpile Inline Script (TS)
-        fileText.match(SCRIPT_CONTENT)?.forEach((script) => {
+        fileText.match(SCRIPT_CONTENT)?.forEach((script, index) => {
             const source = script.slice(script.indexOf(">") + 1).trim();
             let src = source;
-            if (src.includes("@ts-check")) {
-                diagnoseTS(src, filename.replace(".html", ".ts"));
-            }
-            const ast = parse(src, {
-                sourceType: "module",
-                plugins: ["typescript", "topLevelAwait"],
-            });
-            traverse(ast, {
-                ImportDeclaration({ node }) {
-                    const { source } = node;
-                    const pkg = source.value;
-                    if (!pkg.startsWith(".")) {
-                        if (isRouterCompat) {
-                            source.value = `./globals/${pkg}.js`;
-                        }
-                        else {
-                            const dirUpCount = filename.split("/").length - 2;
-                            source.value = `${"../".repeat(dirUpCount)}${dirUpCount ? "" : "./"}globals/${pkg}.js`;
-                        }
-                    }
-                },
-                CallExpression({ node }) {
-                    const { callee } = node;
-                    if (callee.type !== "Import")
-                        return;
-                    const calleeArgument = node.arguments.find((item) => item.type === "StringLiteral");
-                    const pkg = calleeArgument.value;
-                    if (!pkg.startsWith(".")) {
-                        if (isRouterCompat) {
-                            calleeArgument.value = `./globals/${pkg}.js`;
-                        }
-                        else {
-                            const dirUpCount = filename.split("/").length - 2;
-                            calleeArgument.value = `${"../".repeat(dirUpCount)}${dirUpCount ? "" : "./"}globals/${pkg}.js`;
-                        }
-                    }
-                },
-            });
-            src = generate(ast).code;
-            const transpiled = esbuild.transformSync(src, {
-                charset: "utf8",
-                loader: "ts",
-                format: "esm",
-                minify: true,
-            });
+            // Use bundled file and remove it from fs
+            const bundledFile = buildFilename.replace(".html", `-${index}.js`);
+            src = fs.readFileSync(bundledFile, { encoding: "utf-8" });
+            fs.rmSync(bundledFile);
             // Replace src with generated code
-            fileText = fileText.replace(source, transpiled.code.replace(TEMPLATE_LITERAL_MINIFIER, ""));
+            fileText = fileText.replace(source, src.replace(TEMPLATE_LITERAL_MINIFIER, ""));
         });
         // Minify Inline Style
         fileText.match(STYLE_CONTENT)?.forEach((styleElement) => {
@@ -335,7 +161,7 @@ function minifyHTML(filename, buildFilename) {
         fileText = minify(fileText, {
             collapseWhitespace: true,
         });
-        if (isCritical && !isLive) {
+        if (isCritical) {
             const buildFilenameArr = buildFilename.split("/");
             const fileWithBase = buildFilenameArr.pop();
             const buildDir = buildFilenameArr.join("/");
@@ -358,57 +184,4 @@ function minifyHTML(filename, buildFilename) {
             });
         }
     });
-}
-function rebuild(filename) {
-    const [buildFilename] = getBuildNames(filename);
-    if (filename.endsWith(".html")) {
-        glob(`${SOURCE_FOLDER}/**/*.html`, {}, (err, files) => {
-            createGlobalJS(err, files);
-            minifyHTML(filename, buildFilename);
-        });
-    }
-    else if (filename.endsWith(".ts") || filename.endsWith(".js")) {
-        minifyTSJS(filename, buildFilename);
-    }
-    else if (filename.endsWith(".css")) {
-        minifyCSS(filename, buildFilename);
-    }
-}
-function getBuildNames(filename) {
-    const buildFilename = filename.replace(`${SOURCE_FOLDER}/`, `${BUILD_FOLDER}/`);
-    const buildFilenameArr = buildFilename.split("/");
-    buildFilenameArr.pop();
-    const buildPathDir = buildFilenameArr.join("/");
-    return [buildFilename, buildPathDir];
-}
-function diagnoseTS(code, filename) {
-    const options = ts.getDefaultCompilerOptions();
-    const inMemoryFilePath = path.resolve(path.join(dirname(fileURLToPath(import.meta.url)), filename));
-    const AST = ts.createSourceFile(inMemoryFilePath, code, ts.ScriptTarget.Latest);
-    const host = ts.createCompilerHost(options, true);
-    overrideIfInMemoryFile("getSourceFile", AST);
-    overrideIfInMemoryFile("readFile", code);
-    overrideIfInMemoryFile("fileExists", true);
-    const program = ts.createProgram({
-        options,
-        rootNames: [inMemoryFilePath],
-        host,
-    });
-    const allDiagnostics = ts.getPreEmitDiagnostics(program, AST);
-    allDiagnostics.forEach((diagnostic) => {
-        if (diagnostic.messageText) {
-            console.log(`TS: "${diagnostic.messageText}"\n\tnear code: ${diagnostic.file.text.slice(diagnostic.start, diagnostic.start + diagnostic.length)}`);
-        }
-    });
-    function overrideIfInMemoryFile(methodName, inMemoryValue) {
-        //@ts-ignore
-        const originalMethod = host[methodName];
-        //@ts-ignore
-        host[methodName] = (...args) => {
-            const filePath = path.resolve(args[0]);
-            if (filePath === inMemoryFilePath)
-                return inMemoryValue;
-            return originalMethod.apply(host, args);
-        };
-    }
 }
