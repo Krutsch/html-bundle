@@ -1,6 +1,6 @@
 {
   "name": "html-bundle",
-  "version": "4.0.0",
+  "version": "4.0.1",
   "description": "A very simple bundler for HTML SFC",
   "type": "module",
   "bin": "./dist/bundle.js",
@@ -42,7 +42,7 @@
     "esbuild": "^0.8.34",
     "glob": "^7.1.6",
     "html-minifier": "^4.0.0",
-    "postcss": "^7.0.35",
+    "postcss": "^8.2.4",
     "postcss-load-config": "^3.0.0"
   }
 }
