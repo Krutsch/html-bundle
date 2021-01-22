@@ -158,7 +158,9 @@ function minifyHTML(filename, buildFilename) {
             src = fs.readFileSync(bundledFile, { encoding: "utf-8" });
             fs.rmSync(bundledFile);
             // Replace src with generated code
-            fileText = fileText.replace(source, src.replace(TEMPLATE_LITERAL_MINIFIER, ""));
+            const idx = fileText.indexOf(source);
+            fileText =
+                fileText.substring(0, idx) + src + fileText.substr(idx + source.length);
         });
         // Minify Inline Style
         const styleElements = fileText.match(STYLE_CONTENT);

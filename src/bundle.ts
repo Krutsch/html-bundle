@@ -196,10 +196,9 @@ function minifyHTML(filename: string, buildFilename: string) {
       fs.rmSync(bundledFile);
 
       // Replace src with generated code
-      fileText = fileText.replace(
-        source,
-        src.replace(TEMPLATE_LITERAL_MINIFIER, "")
-      );
+      const idx = fileText.indexOf(source);
+      fileText =
+        fileText.substring(0, idx) + src + fileText.substr(idx + source.length);
     });
 
     // Minify Inline Style
