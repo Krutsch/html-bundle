@@ -3,11 +3,15 @@ import fs from "fs";
 import { performance } from "perf_hooks";
 import Event from "events";
 import glob from "glob";
-import csso from "csso";
+import postcss from "postcss";
+import postcssrc from "postcss-load-config";
+import cssnano from "cssnano";
 import esbuild from "esbuild";
 import critical from "critical";
 import { minify } from "html-minifier";
 const isCritical = process.argv.includes("--critical");
+const { plugins, options } = createPostCSSConfig();
+const CSSprocessor = postcss(plugins);
 // Performance Observer and watcher
 const taskEmitter = new Event.EventEmitter();
 const start = performance.now();
@@ -130,15 +134,19 @@ function minifyCSS(filename, buildFilename) {
     fs.readFile(filename, { encoding: "utf-8" }, (err, fileText) => {
         if (err)
             throw err;
-        fs.writeFile(buildFilename, csso.minify(fileText).css, (err) => {
+        CSSprocessor.process(fileText, {
+            ...options,
+            from: filename,
+            to: buildFilename,
+        }).then((result) => fs.writeFile(buildFilename, result.css, (err) => {
             if (err)
                 throw err;
             taskEmitter.emit("done");
-        });
+        }));
     });
 }
 function minifyHTML(filename, buildFilename) {
-    fs.readFile(filename, { encoding: "utf-8" }, (err, fileText) => {
+    fs.readFile(filename, { encoding: "utf-8" }, async (err, fileText) => {
         if (err)
             throw err;
         // Minify Code
@@ -153,10 +161,17 @@ function minifyHTML(filename, buildFilename) {
             fileText = fileText.replace(source, src.replace(TEMPLATE_LITERAL_MINIFIER, ""));
         });
         // Minify Inline Style
-        fileText.match(STYLE_CONTENT)?.forEach((styleElement) => {
-            const style = styleElement.slice(styleElement.indexOf(">") + 1).trim();
-            fileText = fileText.replace(style, csso.minify(style).css);
-        });
+        const styleElements = fileText.match(STYLE_CONTENT);
+        if (styleElements) {
+            for (const styleElement of styleElements) {
+                const style = styleElement.slice(styleElement.indexOf(">") + 1).trim();
+                const { css } = await CSSprocessor.process(style, {
+                    ...options,
+                    from: undefined,
+                });
+                fileText = fileText.replace(style, css);
+            }
+        }
         // Minify HTML
         fileText = minify(fileText, {
             collapseWhitespace: true,
@@ -184,4 +199,12 @@ function minifyHTML(filename, buildFilename) {
             });
         }
     });
+}
+function createPostCSSConfig() {
+    try {
+        return postcssrc.sync({});
+    }
+    catch {
+        return { plugins: [cssnano], options: {} };
+    }
 }
