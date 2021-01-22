@@ -1,28 +1,44 @@
 # html-bundle
 
-> A very simple zero-config bundler for HTML files. The idea is to use HTML as Single File Components, because HTML can already include `<style>` and `<script>` Elements. Additionally, `TypeScript` and `Top-level await` can be used as inline or referenced script in HTML.
+> A very simple zero-config bundler for HTML files. The idea is to use HTML as Single File Components, because HTML can already include `<style>` and `<script>` Elements. Additionally, `TypeScript` can be used as inline or referenced script in HTML.
 
 ## Installation and Usage
 
 ```properties
 $ npm install -D html-bundle
-{ ...
-  "build": "html-bundle" // see flags below
+```
+
+Add an entry to script in package.json
+
+```json
+{
+  "scripts": {
+    "build": "html-bundle" // see flags below
+  }
 }
+```
+
+Add a `postcss.config.cjs` file and run the build command.
+<em>If you do not create this config file, a minimal in-memory config file will be created with `cssnano` as plugin.</em>
+
+```properties
 $ npm run build
 ```
 
-## CLI and Usage
+## CLI
 
-In order to enable TypeScript diagnose information for HTML, use the comment @ts-check in script module.
-
-`--live`: sets a watcher on the src directory in order to trigger builds on the fly.<br>
-`--router-compat`: import paths will always start from the root. This is useful for SPA router<br>
 `--critical`: uses [critical](https://www.npmjs.com/package/critical) to extract and inline critical-path CSS to HTML. <em>This will not work with '--live'.</em>
+You could also specify a watch command (npm i chokidar-cli) in combination with the Live Server VS Code Plugin:
+
+```json
+{
+  "chokidar": "html-bundle && chokidar \"src/**/*\" -c \"html-bundle\""
+}
+```
 
 ## Concept
 
-The bundler always globs all HTML, CSS and TS/JS files from the src/ directory and minifies them to the build/ directory. CSSO is being used for minifying CSS files and inline styles, html-minifier for HTML and esbuild for inline and referenced TS/JS. Additionally, TS/JS files and inline scripts will be bundled as esm by esbuild. However, packages in inline script elements will be created in 'build/globals' to re-import them with ease. This works for dynamic import too!
+The bundler always globs all HTML, CSS and TS/JS files from the src/ directory and minifies them to the build/ directory. PostCSS is being used for processing CSS files and inline styles, html-minifier for HTML and esbuild for inline and referenced TS/JS. Additionally, TS/JS files and inline scripts will be bundled as esm by esbuild.
 
 ## Example
 
@@ -55,8 +71,3 @@ The bundler always globs all HTML, CSS and TS/JS files from the src/ directory a
 ### Output
 
 ![Output](output.JPG)
-
-## Roadmap
-
-- Treeshake dynamic imports
-- VSCode Plugin for TypeScript Support in HTML
