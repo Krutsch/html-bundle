@@ -160,7 +160,9 @@ function minifyHTML(filename, buildFilename) {
             // Replace src with generated code
             const idx = fileText.indexOf(source);
             fileText =
-                fileText.substring(0, idx) + src + fileText.substr(idx + source.length);
+                fileText.substring(0, idx) +
+                    src.replace(TEMPLATE_LITERAL_MINIFIER, "") +
+                    fileText.substr(idx + source.length);
         });
         // Minify Inline Style
         const styleElements = fileText.match(STYLE_CONTENT);
