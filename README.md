@@ -27,8 +27,9 @@ $ npm run build
 
 ## CLI
 
-`--critical`: uses [critical](https://www.npmjs.com/package/critical) to extract and inline critical-path CSS to HTML. <em>This will not work with '--live'.</em>
-You could also specify a watch command (npm i chokidar-cli) in combination with the Live Server VS Code Plugin:
+`--critical`: uses [critical](https://www.npmjs.com/package/critical) to extract and inline critical-path CSS to HTML. <br>
+
+You could also specify a watch command (chokidar-cli) in combination with the Live Server VS Code Plugin:
 
 ```json
 {
@@ -38,7 +39,7 @@ You could also specify a watch command (npm i chokidar-cli) in combination with 
 
 ## Concept
 
-The bundler always globs all HTML, CSS and TS/JS files from the src/ directory and minifies them to the build/ directory. PostCSS is being used for processing CSS files and inline styles, html-minifier for HTML and esbuild for inline and referenced TS/JS. Additionally, TS/JS files and inline scripts will be bundled as esm by esbuild.
+The bundler always globs all HTML, CSS and TS/JS files from the `src/` directory and processes them to the `build/` directory. PostCSS is being used for CSS files and inline styles, html-minifier for HTML and esbuild to bundle, minify, etc. for inline and referenced TS/JS.
 
 ## Example
 
