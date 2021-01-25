@@ -1,6 +1,6 @@
 # html-bundle
 
-> A very simple zero-config bundler for HTML files. The idea is to use HTML as Single File Components, because HTML can already include `<style>` and `<script>` Elements. Additionally, `TypeScript` can be used as inline or referenced script in HTML.
+> A very simple zero-config bundler for HTML files. The idea is to use HTML as Single File Components, because HTML can already include `<style>` and `<script>` elements. Additionally, `TypeScript` can be used as inline or referenced script in HTML.
 
 ## Installation and Usage
 
@@ -8,12 +8,12 @@
 $ npm install -D html-bundle
 ```
 
-Add an entry to script in package.json
+Add an entry to script in package.json (see flags below).
 
 ```json
 {
   "scripts": {
-    "build": "html-bundle" // see flags below
+    "build": "html-bundle"
   }
 }
 ```
@@ -27,19 +27,12 @@ $ npm run build
 
 ## CLI
 
-`--critical`: uses [critical](https://www.npmjs.com/package/critical) to extract and inline critical-path CSS to HTML. <br>
-
-You could also specify a watch command (chokidar-cli) in combination with the Live Server VS Code Plugin:
-
-```json
-{
-  "chokidar": "html-bundle && chokidar \"src/**/*\" -c \"html-bundle\""
-}
-```
+`--hmr`: boots up a static server and enables Hot Module Replacement.<br>
+`--critical`: uses [critical](https://www.npmjs.com/package/critical) to extract and inline critical-path CSS to HTML.<em> This does <strong>not</strong> work nicely with hmr.</em>
 
 ## Concept
 
-The bundler always globs all HTML, CSS and TS/JS files from the `src/` directory and processes them to the `build/` directory. PostCSS is being used for CSS files and inline styles, html-minifier for HTML and esbuild to bundle, minify, etc. for inline and referenced TS/JS.
+The bundler always globs all HTML, CSS and TS/JS files from the `src/` directory and processes them to the `build/` directory. PostCSS is being used for CSS files and inline styles, html-minifier for HTML and esbuild to bundle, minify, etc. for inline and referenced TS/JS. There are no <strong>regexes</strong>, just <strong>AST</strong> transformations. Server-sent events and [hydro.js](https://github.com/Krutsch/hydro-js) are used for HMR.
 
 ## Example
 
