@@ -28,7 +28,7 @@ $ npm run build
 ## CLI
 
 `--hmr`: boots up a static server and enables Hot Module Replacement.<br>
-`--critical`: uses [critical](https://www.npmjs.com/package/critical) to extract and inline critical-path CSS to HTML.<em> This does <strong>not</strong> work nicely with hmr.</em>
+`--critical`: uses [critical](https://www.npmjs.com/package/critical) to extract and inline critical-path CSS to HTML.
 
 ## Concept
 

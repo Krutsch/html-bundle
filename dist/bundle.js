@@ -88,20 +88,12 @@ const CONNECTIONS = [];
 // Remove old build dir
 fs.rmSync(BUILD_FOLDER, { recursive: true, force: true });
 let serverSentEvents;
+let fastify = Fastify();
 if (isHMR) {
-    const fastify = Fastify();
+    fastify = Fastify();
     const __dirname = dirname(fileURLToPath(import.meta.url));
     fastify.register(fastifyStatic, {
         root: path.join(__dirname, BUILD_FOLDER),
-    });
-    //@ts-ignore
-    fastify.get("/", function (_req, reply) {
-        let content = fs.readFileSync(`${BUILD_FOLDER}/index.html`, {
-            encoding: "utf-8",
-        });
-        reply.header("Content-Type", "text/html; charset=UTF-8");
-        content = addHMRCode(content);
-        return reply.send(content);
     });
     fastify.get("/events", (_req, reply) => {
         reply.raw.setHeader("Content-Type", "text/event-stream");
@@ -112,12 +104,15 @@ if (isHMR) {
             rep.write(`data: ${JSON.stringify(data)}\n\n`);
         });
     });
-    fastify.listen(5000);
-    console.log(`💻 Sever listening on port 5000.`);
 }
 // THE BUNDLE CODE
 // Glob all files and transform the code
 glob(`${SOURCE_FOLDER}/**/*.html`, {}, (err, files) => {
+    if (isHMR) {
+        createHMRHandlers(files);
+        fastify.listen(5000);
+        console.log(`💻 Sever listening on port 5000.`);
+    }
     // Create importable and treeshaked esm files that will be imported in HTML
     createGlobalJS(err, files);
     globHandler(minifyHTML)(err, files);
@@ -318,7 +313,7 @@ function minifyHTML(filename, buildFilename) {
                 .then(({ html }) => {
                 taskEmitter.emit("done");
                 if (serverSentEvents) {
-                    serverSentEvents({ html });
+                    serverSentEvents({ html, filename: buildFilename });
                 }
             })
                 .catch((err) => {
@@ -332,7 +327,7 @@ function minifyHTML(filename, buildFilename) {
                     throw err;
                 taskEmitter.emit("done");
                 if (serverSentEvents) {
-                    serverSentEvents({ html: fileText });
+                    serverSentEvents({ html: fileText, filename: buildFilename });
                 }
             });
         }
@@ -369,10 +364,20 @@ function rebuild(filename) {
     }
     else if (filename.endsWith(".css")) {
         minifyCSS(filename, buildFilename);
+        if (isCritical) {
+            glob(`${SOURCE_FOLDER}/**/*.html`, {}, (err, files) => {
+                if (err)
+                    throw err;
+                createGlobalJS(err, files);
+                files.forEach((file) => {
+                    const [buildFilenameHTML] = getBuildNames(file);
+                    minifyHTML(file, buildFilenameHTML);
+                });
+            });
+        }
     }
 }
-const HMRCODE = `
-import { render, html, setShouldSetReactivity, $$, setInsertDiffing } from "https://unpkg.com/hydro-js@1.2.10/dist/library.js";
+const getHMRCode = (filename) => `import { render, html, setShouldSetReactivity, $$, setInsertDiffing } from "https://unpkg.com/hydro-js@1.2.10/dist/library.js";
 
 if (!window.eventsource) {
   setShouldSetReactivity(false);
@@ -387,7 +392,7 @@ if (!window.eventsource) {
         link.setAttribute("href", \`\${href}?v=\${Math.random().toFixed(4)}\`);
     };
 
-    if ("html" in dataObj) {
+    if ("html" in dataObj && "${filename}" === dataObj.filename) {
       const newHTML = html\`\${dataObj.html}\`;
       newHTML.querySelectorAll("link").forEach(updateCSS); // Burst cache for Firefox
       render(newHTML, document.documentElement, false);
@@ -399,12 +404,36 @@ if (!window.eventsource) {
       render(copy, document.documentElement, false);
     }
   });
-}
-`.trimStart();
-function addHMRCode(html) {
+}`;
+function addHMRCode(html, filename) {
     const ast = parse(html);
     const headNode = findElement(ast, (e) => getTagName(e) === "head");
-    const script = createScript({ type: "module" }, HMRCODE);
+    const script = createScript({ type: "module" }, getHMRCode(filename));
     appendChild(headNode, script);
     return serialize(ast);
+}
+function createHMRHandlers(files) {
+    files.forEach((filename) => {
+        const newFilename = "/" + filename.replace(/src\//, "");
+        const filePath = newFilename.split("/");
+        const endName = filePath.pop();
+        if (endName.endsWith("index.html")) {
+            //@ts-ignore
+            fastify.get(filePath.join("/") + "/", HMRHandler);
+        }
+        //@ts-ignore
+        fastify.get(newFilename, HMRHandler);
+    });
+}
+function HMRHandler(request, reply) {
+    let filename = request.url;
+    if (filename.endsWith("/")) {
+        filename += "index.html";
+    }
+    filename = BUILD_FOLDER + filename;
+    const file = fs.readFileSync(filename, {
+        encoding: "utf-8",
+    });
+    reply.header("Content-Type", "text/html; charset=UTF-8");
+    return reply.send(addHMRCode(file, filename));
 }
