@@ -3,8 +3,7 @@ import fs from "fs";
 import { performance } from "perf_hooks";
 import Event from "events";
 import glob from "glob";
-import path, { dirname } from "path";
-import { fileURLToPath } from "url";
+import path from "path";
 import Fastify from "fastify";
 import fastifyStatic from "fastify-static";
 import postcss from "postcss";
@@ -88,12 +87,11 @@ const CONNECTIONS = [];
 // Remove old build dir
 fs.rmSync(BUILD_FOLDER, { recursive: true, force: true });
 let serverSentEvents;
-let fastify = Fastify();
+let fastify;
 if (isHMR) {
     fastify = Fastify();
-    const __dirname = dirname(fileURLToPath(import.meta.url));
     fastify.register(fastifyStatic, {
-        root: path.join(__dirname, BUILD_FOLDER),
+        root: path.join(process.cwd(), BUILD_FOLDER),
     });
     fastify.get("/events", (_req, reply) => {
         reply.raw.setHeader("Content-Type", "text/event-stream");

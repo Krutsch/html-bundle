@@ -4,8 +4,7 @@ import fs from "fs";
 import { performance } from "perf_hooks";
 import Event from "events";
 import glob from "glob";
-import path, { dirname } from "path";
-import { fileURLToPath } from "url";
+import path from "path";
 import Fastify, { FastifyReply, FastifyRequest } from "fastify";
 import fastifyStatic from "fastify-static";
 import postcss, { AcceptedPlugin, ProcessOptions } from "postcss";
@@ -115,12 +114,11 @@ type serverSentEventObject =
   | { css: string }
   | { js: string };
 let serverSentEvents: undefined | ((data: serverSentEventObject) => void);
-let fastify = Fastify();
+let fastify: ReturnType<typeof Fastify>;
 if (isHMR) {
   fastify = Fastify();
-  const __dirname = dirname(fileURLToPath(import.meta.url));
   fastify.register(fastifyStatic, {
-    root: path.join(__dirname, BUILD_FOLDER),
+    root: path.join(process.cwd(), BUILD_FOLDER),
   });
 
   fastify.get("/events", (_req, reply) => {
