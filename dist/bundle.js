@@ -106,47 +106,48 @@ if (isHMR) {
 // THE BUNDLE CODE
 // Glob all files and transform the code
 glob(`${SOURCE_FOLDER}/**/*.html`, {}, (err, files) => {
+    if (err) {
+        console.error(err);
+        process.exit(1);
+    }
+    expectedTasks += files.length;
     if (isHMR) {
         createHMRHandlers(files);
         fastify.listen(5000);
         console.log(`💻 Sever listening on port 5000.`);
     }
     // Create importable and treeshaked esm files that will be imported in HTML
-    createGlobalJS(err, files);
-    globHandler(minifyHTML)(err, files);
-    glob(`${SOURCE_FOLDER}/**/*.{ts,js}`, {}, globHandler(minifyTSJS));
-    glob(`${SOURCE_FOLDER}/**/*.css`, {}, globHandler(minifyCSS));
+    createGlobalJS(files);
 });
-function globHandler(minifyFn) {
-    return (err, files) => {
-        if (err) {
-            console.error(err);
-            process.exit(1);
-        }
-        if (files.length &&
-            (files[0].endsWith(".ts") || files[0].endsWith(".js"))) {
-            expectedTasks += 1;
-            minifyFn(files);
-            return;
-        }
-        expectedTasks += files.length;
-        files.forEach((filename) => {
-            const [buildFilename, buildPathDir] = getBuildNames(filename);
-            fs.mkdir(buildPathDir, { recursive: true }, (err) => {
-                if (err) {
-                    console.error(err);
-                    process.exit(1);
-                }
-                minifyFn(filename, buildFilename);
-            });
-        });
-    };
-}
-function createGlobalJS(err, files) {
+glob(`${SOURCE_FOLDER}/**/*.css`, {}, async (err, files) => {
     if (err) {
         console.error(err);
         process.exit(1);
     }
+    expectedTasks += files.length;
+    for (const filename of files) {
+        const [buildFilename, buildPathDir] = getBuildNames(filename);
+        fs.mkdirSync(buildPathDir, { recursive: true });
+        await minifyCSS(filename, buildFilename);
+    }
+    // Nest HTML in CSS Glob because critical needs to create CSS files first
+    glob(`${SOURCE_FOLDER}/**/*.html`, {}, (_err, files) => {
+        files.forEach((filename) => {
+            const [buildFilename, buildPathDir] = getBuildNames(filename);
+            fs.mkdirSync(buildPathDir, { recursive: true });
+            minifyHTML(filename, buildFilename);
+        });
+    });
+});
+glob(`${SOURCE_FOLDER}/**/*.{ts,js}`, {}, (err, files) => {
+    if (err) {
+        console.error(err);
+        process.exit(1);
+    }
+    expectedTasks += 1;
+    minifyTSJS(files);
+});
+function createGlobalJS(files) {
     // Create folders
     fs.mkdirSync(BUILD_FOLDER, { recursive: true });
     // Glob all inline scripts and create importable files
@@ -162,10 +163,11 @@ function createGlobalJS(err, files) {
         }
         const scripts = findElements(DOM, (e) => getTagName(e) === "script");
         scripts.forEach((script, index) => {
-            const src = script.childNodes[0];
+            const scriptTextNode = script.childNodes[0];
+            const isReferencedScript = script.attrs.find((a) => a.name === "src");
             //@ts-ignore
-            const srcValue = src?.value;
-            if (!srcValue)
+            const scriptContent = scriptTextNode?.value;
+            if (!scriptContent || isReferencedScript)
                 return;
             let buildFilename = filename
                 .slice(filename.indexOf("src/") + 4)
@@ -177,13 +179,16 @@ function createGlobalJS(err, files) {
                 fs.mkdirSync(buildPathDir, { recursive: true });
             }
             scriptFilenames.push(buildFilename);
-            fs.writeFileSync(buildFilename, srcValue);
+            fs.writeFileSync(buildFilename, scriptContent);
         });
     });
     esbuild.buildSync({
         entryPoints: scriptFilenames,
         charset: "utf8",
         format: "esm",
+        define: {
+            "process.env.NODE_ENV": isHMR ? '"development"' : '"production"',
+        },
         splitting: true,
         bundle: true,
         minify: true,
@@ -197,10 +202,7 @@ function createGlobalJS(err, files) {
             const buildPathDir = buildPathArr.join("/");
             const length = fs.readdirSync(buildPathDir).length;
             if (!length)
-                fs.rmdir(buildPathDir, () => {
-                    if (err)
-                        throw err;
-                });
+                fs.rmdirSync(buildPathDir);
         }
     });
 }
@@ -212,37 +214,42 @@ function minifyTSJS(files) {
         format: "esm",
         incremental: isHMR,
         splitting: true,
+        define: {
+            "process.env.NODE_ENV": isHMR ? '"development"' : '"production"',
+        },
         bundle: true,
         minify: true,
         outdir: BUILD_FOLDER,
+        outbase: "src",
     })
         .then(() => {
         taskEmitter.emit("done");
         if (serverSentEvents) {
             const file = files.pop(); // Only one filed was modified
             const [buildFilename] = getBuildNames(file);
-            const filetext = fs.readFileSync(buildFilename, { encoding: "utf8" });
-            serverSentEvents({ js: filetext });
+            const js = fs.readFileSync(buildFilename, { encoding: "utf8" });
+            serverSentEvents({
+                js,
+                filename: buildFilename.split(`${BUILD_FOLDER}/`).pop(),
+            });
         }
     });
 }
-function minifyCSS(filename, buildFilename) {
-    fs.readFile(filename, { encoding: "utf-8" }, (err, fileText) => {
-        if (err)
-            throw err;
-        CSSprocessor.process(fileText, {
-            ...options,
-            from: filename,
-            to: buildFilename,
-        }).then((result) => fs.writeFile(buildFilename, result.css, (err) => {
-            if (err)
-                throw err;
-            taskEmitter.emit("done");
-            if (serverSentEvents) {
-                serverSentEvents({ css: result.css });
-            }
-        }));
+async function minifyCSS(filename, buildFilename) {
+    const fileText = fs.readFileSync(filename, { encoding: "utf-8" });
+    const result = await CSSprocessor.process(fileText, {
+        ...options,
+        from: filename,
+        to: buildFilename,
     });
+    fs.writeFileSync(buildFilename, result.css);
+    taskEmitter.emit("done");
+    if (serverSentEvents) {
+        serverSentEvents({
+            css: result.css,
+            filename: buildFilename.split(`${BUILD_FOLDER}/`).pop(),
+        });
+    }
 }
 function minifyHTML(filename, buildFilename) {
     fs.readFile(filename, { encoding: "utf-8" }, async (err, fileText) => {
@@ -258,10 +265,10 @@ function minifyHTML(filename, buildFilename) {
         // Minify Code
         const scripts = findElements(DOM, (e) => getTagName(e) === "script");
         scripts.forEach((script, index) => {
-            const node = script.childNodes[0];
+            const scriptTextNode = script.childNodes[0];
+            const isReferencedScript = script.attrs.find((a) => a.name === "src");
             //@ts-ignore
-            const src = node?.value;
-            if (!src)
+            if (!scriptTextNode?.value || isReferencedScript)
                 return;
             // Use bundled file and remove it from fs
             const bundledFilename = buildFilename.replace(".html", `-${index}.js`);
@@ -271,7 +278,7 @@ function minifyHTML(filename, buildFilename) {
             fs.rmSync(bundledFilename);
             // Replace src with bundled code
             //@ts-ignore
-            node.value = scriptContent.replace(TEMPLATE_LITERAL_MINIFIER, "");
+            scriptTextNode.value = scriptContent.replace(TEMPLATE_LITERAL_MINIFIER, "");
         });
         // Minify Inline Style
         const styles = findElements(DOM, (e) => getTagName(e) === "style");
@@ -353,7 +360,7 @@ function rebuild(filename) {
         glob(`${SOURCE_FOLDER}/**/*.html`, {}, (err, files) => {
             if (err)
                 throw err;
-            createGlobalJS(err, files);
+            createGlobalJS(files);
             minifyHTML(filename, buildFilename);
         });
     }
@@ -366,7 +373,7 @@ function rebuild(filename) {
             glob(`${SOURCE_FOLDER}/**/*.html`, {}, (err, files) => {
                 if (err)
                     throw err;
-                createGlobalJS(err, files);
+                createGlobalJS(files);
                 files.forEach((file) => {
                     const [buildFilenameHTML] = getBuildNames(file);
                     minifyHTML(file, buildFilenameHTML);
@@ -384,20 +391,29 @@ if (!window.eventsource) {
   window.eventsource = new EventSource("/events");
   window.eventsource.addEventListener("message", ({ data }) => {
     const dataObj = JSON.parse(data);
-    const updateCSS = (link) => {
-      const href = link.getAttribute("href")?.replace(/\\?v=.*/, "");
-      href &&
-        link.setAttribute("href", \`\${href}?v=\${Math.random().toFixed(4)}\`);
+    const updateAttr = (attr, update = true) => (elem) => {
+      const attrValue = elem[attr].replace(/\\?v=.*/, "");
+      if (attrValue && (!update || attrValue.endsWith(dataObj.filename))) {
+        elem[attr] = \`\${attrValue}?v=\${Math.random().toFixed(4)}\`;
+      }
     };
 
     if ("html" in dataObj && "${filename}" === dataObj.filename) {
-      const newHTML = html\`\${dataObj.html}\`;
-      newHTML.querySelectorAll("link").forEach(updateCSS); // Burst cache for Firefox
-      render(newHTML, document.documentElement, false);
+      let newHTML;
+      let isBody = false;
+      if (dataObj.html.startsWith('<!DOCTYPE html>') || dataObj.html.startsWith('<html')) {
+        newHTML = html\`\${dataObj.html}\`;
+      } else {
+        newHTML = html\`<body>\${dataObj.html}</body>\`
+        isBody = true
+      }
+      newHTML.querySelectorAll("link").forEach(updateAttr("href", false)); // Burst cache for Firefox
+      render(newHTML, isBody ? document.body : document.documentElement, false);
     } else if ("css" in dataObj) {
-      $$(\`link\`).forEach(updateCSS);
+      $$('link').forEach(updateAttr("href"));
     } else if ("js" in dataObj) {
       const copy = html\`\${document.documentElement.outerHTML}\`;
+      copy.querySelectorAll('script').forEach(updateAttr("src"));
       document.documentElement.innerHTML = "";
       render(copy, document.documentElement, false);
     }

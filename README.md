@@ -32,11 +32,11 @@ $ npm run build
 
 ## Concept
 
-The bundler always globs all HTML, CSS and TS/JS files from the `src/` directory and processes them to the `build/` directory. PostCSS is being used for CSS files and inline styles, html-minifier for HTML and esbuild to bundle, minify, etc. for inline and referenced TS/JS. There are no <strong>regexes</strong>, just <strong>AST</strong> transformations. Server-sent events and [hydro.js](https://github.com/Krutsch/hydro-js) are used for HMR.
+The bundler always globs all HTML, CSS and TS/JS files from the `src/` directory and processes them to the `build/` directory. PostCSS is being used for CSS files and inline styles, html-minifier for HTML and esbuild to bundle, minify, etc. for inline and referenced TS/JS. There are no <strong>regexes</strong>, just <strong>AST</strong> transformations. Server-sent events and [hydro-js](https://github.com/Krutsch/hydro-js) are used for HMR.
 
-## Example
+## Example hydro-js
 
-### Input
+#### Input
 
 ```html
 <!DOCTYPE html>
@@ -65,3 +65,37 @@ The bundler always globs all HTML, CSS and TS/JS files from the `src/` directory
 ### Output
 
 ![Output](output.JPG)
+
+## Example Vue.js
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vue Example</title>
+  </head>
+  <script type="module">
+    import { createApp, h } from "vue";
+    import htm from "htm";
+    const html = htm.bind(h);
+
+    const App = {
+      data() {
+        return {
+          name: "Fabian",
+        };
+      },
+      render() {
+        return html`<p>${this.name}</p>`;
+      },
+    };
+
+    createApp(App).mount("#app");
+  </script>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
+```
