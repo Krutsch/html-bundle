@@ -105,9 +105,6 @@ const BUILD_FOLDER = "build";
 const TEMPLATE_LITERAL_MINIFIER = /\n\s+/g;
 const CONNECTIONS: Array<any> = [];
 
-// Remove old build dir
-fs.rmSync(BUILD_FOLDER, { recursive: true, force: true });
-
 // Server for HMR
 type serverSentEventObject =
   | { html: string; filename: string }
@@ -333,7 +330,7 @@ function minifyHTML(filename: string, buildFilename: string) {
       //@ts-ignore
       scriptTextNode.value = scriptContent.replace(
         TEMPLATE_LITERAL_MINIFIER,
-        ""
+        " "
       );
     });
 
@@ -380,7 +377,10 @@ function minifyHTML(filename: string, buildFilename: string) {
           taskEmitter.emit("done");
 
           if (serverSentEvents) {
-            serverSentEvents({ html, filename: buildFilename });
+            serverSentEvents({
+              html: addHMRCode(html, buildFilename),
+              filename: buildFilename,
+            });
           }
         })
         .catch((err: Error) => {
@@ -393,7 +393,10 @@ function minifyHTML(filename: string, buildFilename: string) {
         taskEmitter.emit("done");
 
         if (serverSentEvents) {
-          serverSentEvents({ html: fileText, filename: buildFilename });
+          serverSentEvents({
+            html: addHMRCode(fileText, buildFilename),
+            filename: buildFilename,
+          });
         }
       });
     }
@@ -449,15 +452,15 @@ function rebuild(filename: string) {
   }
 }
 
-const getHMRCode = (filename: string) =>
-  `import { render, html, setShouldSetReactivity, $$, setInsertDiffing } from "https://unpkg.com/hydro-js@1.2.10/dist/library.js";
+const getHMRCode = (filename: string, id: string) =>
+  `import { render, html, setShouldSetReactivity, $$, setInsertDiffing } from "https://unpkg.com/hydro-js/dist/library.js";
 
-if (!window.eventsource) {
+if (!window.eventsource${id}) {
   setShouldSetReactivity(false);
   setInsertDiffing(true);
 
-  window.eventsource = new EventSource("/events");
-  window.eventsource.addEventListener("message", ({ data }) => {
+  window.eventsource${id} = new EventSource("/events");
+  window.eventsource${id}.addEventListener("message", ({ data }) => {
     const dataObj = JSON.parse(data);
     const updateAttr = (attr, update = true) => (elem) => {
       const attrValue = elem[attr].replace(/\\?v=.*/, "");
@@ -476,7 +479,25 @@ if (!window.eventsource) {
         isBody = true
       }
       newHTML.querySelectorAll("link").forEach(updateAttr("href", false)); // Burst cache for Firefox
-      render(newHTML, isBody ? document.body : document.documentElement, false);
+      if (isBody) {
+        const hmrID = "${id}";
+        const hmrElems = Array.from(newHTML.childNodes);
+        const hmrWheres = Array.from($$(\`[data-hmr="\${hmrID}"]\`))
+        hmrWheres.forEach((where, index) => {
+            if (index < hmrElems.length) {
+              render(hmrElems[index], where, false);
+            } else {
+              where.remove();
+            }
+        });
+        for (let rest = hmrWheres.length; rest < hmrElems.length; rest++) {
+          const template = document.createElement('template');
+          hmrElems[hmrWheres.length].after(template);
+          render(hmrElems[rest], template, false);
+        }
+    } else {
+      render(newHTML, document.documentElement, false);
+    }
     } else if ("css" in dataObj) {
       $$('link').forEach(updateAttr("href"));
     } else if ("js" in dataObj) {
@@ -488,11 +509,39 @@ if (!window.eventsource) {
   });
 }`;
 
+function randomText() {
+  return Math.random().toString(32).slice(2);
+}
+
+const htmlIdMap = new Map();
 function addHMRCode(html: string, filename: string) {
-  const ast = parse(html);
-  const headNode = findElement(ast, (e) => getTagName(e) === "head");
-  const script = createScript({ type: "module" }, getHMRCode(filename));
-  appendChild(headNode as ParentNode, script);
+  if (!htmlIdMap.has(filename)) {
+    htmlIdMap.set(filename, randomText());
+  }
+
+  let ast;
+  if (html.includes("<html")) {
+    ast = parse(html);
+    const headNode = findElement(ast, (e) => getTagName(e) === "head");
+    const script = createScript(
+      { type: "module" },
+      getHMRCode(filename, htmlIdMap.get(filename))
+    );
+    appendChild(headNode as ParentNode, script);
+  } else {
+    ast = parseFragment(html);
+    ast.childNodes.forEach((node) =>
+      //@ts-ignore
+      node.attrs?.push({ name: "data-hmr", value: htmlIdMap.get(filename) })
+    );
+    appendChild(
+      ast,
+      createScript(
+        { type: "module" },
+        getHMRCode(filename, htmlIdMap.get(filename))
+      )
+    );
+  }
   return serialize(ast);
 }
 
