@@ -17,10 +17,16 @@ import { serialize, parse, parseFragment } from "parse5";
 import { createScript, getTagName, appendChild, findElement, findElements, } from "@web/parse5-utils";
 console.clear(); // findElement is logging an array for no reason
 // CLI and options
-const { plugins, options } = createPostCSSConfig();
-const CSSprocessor = postcss(plugins);
 const isCritical = process.argv.includes("--critical");
 const isHMR = process.argv.includes("--hmr");
+if (isHMR) {
+    process.env.NODE_ENV = "development";
+}
+else {
+    process.env.NODE_ENV = "production";
+}
+const { plugins, options } = createPostCSSConfig();
+const CSSprocessor = postcss(plugins);
 // Performance Observer and watcher
 const taskEmitter = new Event.EventEmitter();
 const start = performance.now();
