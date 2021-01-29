@@ -454,40 +454,40 @@ function rebuild(filename: string) {
   }
 }
 
-const getHMRCode = (filename: string, id: string) =>
-  `import { render, html, setShouldSetReactivity, $$, setInsertDiffing } from "https://unpkg.com/hydro-js/dist/library.js";
+const getHMRCode = (
+  filename: string,
+  id: string
+) => `import { render, html, setShouldSetReactivity, $$, setGlobalSchedule, setInsertDiffing } from "https://unpkg.com/hydro-js/dist/library.js";
 
 if (!window.eventsource${id}) {
+  setGlobalSchedule(false);
   setShouldSetReactivity(false);
-  setInsertDiffing(true);
 
   window.eventsource${id} = new EventSource("/events");
   window.eventsource${id}.addEventListener("message", ({ data }) => {
     const dataObj = JSON.parse(data);
-    const updateAttr = (attr, update = true) => (elem) => {
-      const attrValue = elem[attr].replace(/\\?v=.*/, "");
-      if (attrValue && (!update || attrValue.endsWith(dataObj.filename))) {
-        elem[attr] = \`\${attrValue}?v=\${Math.random().toFixed(4)}\`;
-      }
-    };
 
     if ("html" in dataObj && "${filename}" === dataObj.filename) {
+      setInsertDiffing(true);
+
       let newHTML;
-      let isBody = false;
+      let isBody;
+
       if (dataObj.html.startsWith('<!DOCTYPE html>') || dataObj.html.startsWith('<html')) {
         newHTML = html\`\${dataObj.html}\`;
       } else {
         newHTML = html\`<body>\${dataObj.html}</body>\`
         isBody = true
       }
-      newHTML.querySelectorAll("link").forEach(updateAttr("href", false)); // Burst cache for Firefox
+
       if (isBody) {
         const hmrID = "${id}";
         const hmrElems = Array.from(newHTML.childNodes);
         const hmrWheres = Array.from($$(\`[data-hmr="\${hmrID}"]\`))
+        // Render new Elements in old Elements, also remove rest old Elements and add add new elements after the last old one
         hmrWheres.forEach((where, index) => {
             if (index < hmrElems.length) {
-              render(hmrElems[index], where, false);
+              render(hmrElems[index], where);
             } else {
               where.remove();
             }
@@ -495,20 +495,55 @@ if (!window.eventsource${id}) {
         for (let rest = hmrWheres.length; rest < hmrElems.length; rest++) {
           const template = document.createElement('template');
           hmrElems[hmrWheres.length].after(template);
-          render(hmrElems[rest], template, false);
+          render(hmrElems[rest], template);
+          template.remove();
         }
-    } else {
-      render(newHTML, document.documentElement, false);
-    }
+      } else {
+        render(newHTML, document.documentElement);
+      }
+      // TODO: Burst CSS Cache for Firefox
+      setInsertDiffing(false);
     } else if ("css" in dataObj) {
-      $$('link').forEach(updateAttr("href"));
+      window.onceEveryXTime(100, window.updateCSS, [updateAttr]);
     } else if ("js" in dataObj) {
+      window.onceEveryXTime(100, window.updateJS, [updateAttr]);
+    }
+
+    function updateAttr (attr, forceUpdate = false) {
+      return (elem) => {
+        const attrValue = elem[attr].replace(/\\?v=.*/, "");
+        if (forceUpdate || attrValue.endsWith(dataObj.filename)) {
+          elem[attr] = \`\${attrValue}?v=\${Math.random().toFixed(4)}\`;
+        }
+      }
+    };
+  });
+
+  if (!window.updateCSS) {
+    window.updateCSS = function updateCSS(updateAttr) {
+      $$('link').forEach(updateAttr("href"));
+      window.fnToLastCalled.set(window.updateCSS, performance.now())
+    }
+  }
+  if (!window.updateJS) {
+    window.updateJS = function updateJS(updateAttr) {
+      window.fnToLastCalled.set(window.updateJS, performance.now());
       const copy = html\`\${document.documentElement.outerHTML}\`;
       copy.querySelectorAll('script').forEach(updateAttr("src"));
-      document.documentElement.innerHTML = "";
-      render(copy, document.documentElement, false);
+      // TODO: how to update inline scripts that import the referenced js files
+      render(copy, document.documentElement);
     }
-  });
+  }
+  if (!window.fnToLastCalled) {
+    window.fnToLastCalled = new Map();
+  }
+  if (!window.onceEveryXTime) {
+    window.onceEveryXTime = function (time, fn, params) {
+      if (!window.fnToLastCalled.has(fn) || performance.now() - window.fnToLastCalled.get(fn) > time) {
+        fn(...params)
+      }
+    }
+  }
 }`;
 
 function randomText() {
@@ -521,14 +556,14 @@ function addHMRCode(html: string, filename: string) {
     htmlIdMap.set(filename, randomText());
   }
 
+  const script = createScript(
+    { type: "module" },
+    getHMRCode(filename, htmlIdMap.get(filename))
+  );
   let ast;
   if (html.includes("<html")) {
     ast = parse(html);
     const headNode = findElement(ast, (e) => getTagName(e) === "head");
-    const script = createScript(
-      { type: "module" },
-      getHMRCode(filename, htmlIdMap.get(filename))
-    );
     appendChild(headNode as ParentNode, script);
   } else {
     ast = parseFragment(html);
@@ -536,13 +571,7 @@ function addHMRCode(html: string, filename: string) {
       //@ts-ignore
       node.attrs?.push({ name: "data-hmr", value: htmlIdMap.get(filename) })
     );
-    appendChild(
-      ast,
-      createScript(
-        { type: "module" },
-        getHMRCode(filename, htmlIdMap.get(filename))
-      )
-    );
+    appendChild(ast, script);
   }
   return serialize(ast);
 }
