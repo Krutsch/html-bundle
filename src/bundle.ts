@@ -501,7 +501,6 @@ if (!window.eventsource${id}) {
       } else {
         render(newHTML, document.documentElement);
       }
-      // TODO: Burst CSS Cache for Firefox
       setInsertDiffing(false);
     } else if ("css" in dataObj) {
       window.onceEveryXTime(100, window.updateCSS, [updateAttr]);
@@ -514,6 +513,8 @@ if (!window.eventsource${id}) {
         const attrValue = elem[attr].replace(/\\?v=.*/, "");
         if (forceUpdate || attrValue.endsWith(dataObj.filename)) {
           elem[attr] = \`\${attrValue}?v=\${Math.random().toFixed(4)}\`;
+        } else if (elem.localName === 'script' && !elem.src && new RegExp(\`["']\${dataObj.filename}["']\`).test(elem.textContent)) {
+          elem.setAttribute('data-inline', String(Math.random().toFixed(4)).slice(2));
         }
       }
     };
@@ -530,7 +531,6 @@ if (!window.eventsource${id}) {
       window.fnToLastCalled.set(window.updateJS, performance.now());
       const copy = html\`\${document.documentElement.outerHTML}\`;
       copy.querySelectorAll('script').forEach(updateAttr("src"));
-      // TODO: how to update inline scripts that import the referenced js files
       render(copy, document.documentElement);
     }
   }
@@ -573,6 +573,13 @@ function addHMRCode(html: string, filename: string) {
     );
     appendChild(ast, script);
   }
+
+  // Burst CSS cache
+  findElements(ast, (e) => getTagName(e) === "link").forEach((link) => {
+    const href = link.attrs.find((attr) => attr.name === "href")!;
+    href.value += `?v=${Math.random().toFixed(4)}`;
+  });
+
   return serialize(ast);
 }
 
