@@ -35,12 +35,15 @@ taskEmitter.on("done", () => {
             const watcher = watch(SOURCE_FOLDER);
             // The add watcher will add all the files initially - do not watch them
             let initialAdd = 0;
+            let hasJSTS = false;
             watcher.on("add", (filename) => {
                 filename = String.raw `${filename}`.replace(/\\/g, "/");
-                if (filename.endsWith(".html") ||
-                    filename.endsWith(".css") ||
-                    filename.endsWith(".js") ||
-                    filename.endsWith(".ts")) {
+                if (filename.endsWith(".html") || filename.endsWith(".css")) {
+                    initialAdd++;
+                }
+                else if (hasJSTS === false &&
+                    (filename.endsWith(".js") || filename.endsWith(".ts"))) {
+                    hasJSTS = true;
                     initialAdd++;
                 }
                 if (initialAdd <= expectedTasks)
@@ -223,7 +226,7 @@ function minifyTSJS(files) {
         .then(() => {
         taskEmitter.emit("done");
         if (serverSentEvents) {
-            const file = files.pop(); // Only one filed was modified
+            const file = files.pop().replace(".ts", ".js"); // Only one filed was modified
             const [buildFilename] = getBuildNames(file);
             const js = fs.readFileSync(buildFilename, { encoding: "utf8" });
             serverSentEvents({
