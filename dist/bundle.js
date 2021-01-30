@@ -186,6 +186,7 @@ function createGlobalJS(files) {
             },
             splitting: true,
             bundle: true,
+            loader: { ".js": "jsx", ".ts": "tsx" },
             minify: true,
             outdir: BUILD_FOLDER,
             outbase: BUILD_FOLDER,
@@ -211,6 +212,7 @@ function minifyTSJS(files) {
         define: {
             "process.env.NODE_ENV": isHMR ? '"development"' : '"production"',
         },
+        loader: { ".js": "jsx", ".ts": "tsx" },
         bundle: true,
         minify: true,
         outdir: BUILD_FOLDER,
