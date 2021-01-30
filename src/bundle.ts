@@ -12,7 +12,7 @@ import postcssrc from "postcss-load-config";
 import cssnano from "cssnano";
 import esbuild from "esbuild";
 import critical from "critical";
-import { minify } from "html-minifier";
+import { minify } from "html-minifier-terser";
 import { watch } from "chokidar";
 import { serialize, parse, parseFragment } from "parse5";
 import {
@@ -161,7 +161,7 @@ glob(`${SOURCE_FOLDER}/**/*.css`, {}, (err, files) => {
     minifyCSS(filename, buildFilename);
   }
 });
-glob(`${SOURCE_FOLDER}/**/*.{ts,js}`, {}, (err, files) => {
+glob(`${SOURCE_FOLDER}/**/!(*.d).{ts,js}`, {}, (err, files) => {
   errorHandler(err);
   if (files.length) {
     expectedTasks += 1;
