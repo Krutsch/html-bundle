@@ -64,10 +64,7 @@ taskEmitter.on("done", () => {
         filename = String.raw`${filename}`.replace(/\\/g, "/");
         if (filename.endsWith(".html") || filename.endsWith(".css")) {
           initialAdd++;
-        } else if (
-          hasJSTS === false &&
-          (filename.endsWith(".js") || filename.endsWith(".ts"))
-        ) {
+        } else if (hasJSTS === false && /\.(j|t)sx?$/.test(filename)) {
           hasJSTS = true;
           initialAdd++;
         }
@@ -88,7 +85,13 @@ taskEmitter.on("done", () => {
         console.log(`⚡ modified ${buildFilename}`);
       });
       watcher.on("unlink", (filename) => {
+        // Return if it was deleted by the build system itself
+        if (/-bundle-\d+\.(j|t)sx?$/.test(filename)) {
+          return;
+        }
+
         filename = String.raw`${filename}`.replace(/\\/g, "/");
+        JSTSFiles.delete(filename);
         const [buildFilename, buildPathDir] = getBuildNames(filename);
         fs.rm(buildFilename.replace(".ts", ".js"), (err) => {
           errorHandler(err);
@@ -161,7 +164,9 @@ glob(`${SOURCE_FOLDER}/**/*.css`, {}, (err, files) => {
     minifyCSS(filename, buildFilename);
   }
 });
-glob(`${SOURCE_FOLDER}/**/!(*.d).{ts,js}`, {}, (err, files) => {
+
+const JSTSFiles = new Set<string>();
+glob(`${SOURCE_FOLDER}/**/!(*.d).{ts,js,tsx,jsx}`, {}, (err, files) => {
   errorHandler(err);
   if (files.length) {
     expectedTasks += 1;
@@ -169,16 +174,17 @@ glob(`${SOURCE_FOLDER}/**/!(*.d).{ts,js}`, {}, (err, files) => {
     globHTML.emit("getReady");
   }
 
-  minifyTSJS(files);
+  files.forEach((file) => JSTSFiles.add(file));
+  minifyTSJS().catch(errorHandler);
 });
 globHTML.on("getReady", () => {
   if (expectedTasks - htmlTasks === finishedTasks) {
     // After CSS and JS because critical needs file built css files and inline script might reference js files.
 
-    glob(`${SOURCE_FOLDER}/**/*.html`, {}, (err, files) => {
+    glob(`${SOURCE_FOLDER}/**/*.html`, {}, async (err, files) => {
       errorHandler(err);
 
-      createGlobalJS(files);
+      await createGlobalJS(files);
       files.forEach((filename) => {
         const [buildFilename, buildPathDir] = getBuildNames(filename);
         fs.mkdirSync(buildPathDir, { recursive: true });
@@ -192,7 +198,6 @@ function createGlobalJS(files: Array<string>) {
   const scriptFilenames: string[] = [];
 
   files.forEach((filename) => {
-    const [buildFilename, buildPathDir] = getBuildNames(filename);
     const fileText = fs.readFileSync(filename, { encoding: "utf-8" });
 
     let DOM;
@@ -210,41 +215,27 @@ function createGlobalJS(files: Array<string>) {
       const scriptContent = scriptTextNode?.value;
       if (!scriptContent || isReferencedScript) return;
 
-      const jsFilename = buildFilename.replace(".html", `-${index}.ts`);
-      fs.mkdirSync(buildPathDir, { recursive: true });
+      const jsFilename = filename.replace(".html", `-bundle-${index}.ts`);
       scriptFilenames.push(jsFilename);
       fs.writeFileSync(jsFilename, scriptContent);
     });
   });
 
-  try {
-    esbuild.buildSync({
-      entryPoints: scriptFilenames,
-      charset: "utf8",
-      format: "esm",
-      define: {
-        "process.env.NODE_ENV": isHMR ? '"development"' : '"production"',
-      },
-      splitting: true,
-      bundle: true,
-      loader: { ".js": "jsx", ".ts": "tsx" },
-      minify: true,
-      outdir: BUILD_FOLDER,
-      outbase: BUILD_FOLDER,
-    });
-  } catch (err) {
-    console.error(err);
-  } finally {
-    scriptFilenames.forEach((file) => {
-      fs.rmSync(file);
-    });
-  }
+  scriptFilenames.forEach((file) => JSTSFiles.add(file));
+  return minifyTSJS(true)
+    .catch(console.error)
+    .finally(() =>
+      scriptFilenames.forEach((file) => {
+        JSTSFiles.delete(file);
+        fs.rmSync(file);
+      })
+    );
 }
 
-function minifyTSJS(files: Array<string>) {
-  esbuild
+function minifyTSJS(isInline: boolean = false, file?: string): Promise<any> {
+  return esbuild
     .build({
-      entryPoints: files,
+      entryPoints: Array.from(JSTSFiles),
       charset: "utf8",
       format: "esm",
       incremental: isHMR,
@@ -256,24 +247,23 @@ function minifyTSJS(files: Array<string>) {
       bundle: true,
       minify: true,
       outdir: BUILD_FOLDER,
-      outbase: "src",
+      outbase: SOURCE_FOLDER,
     })
     .then(() => {
-      taskEmitter.emit("done");
-      globHTML.emit("getReady");
+      if (!isInline) {
+        taskEmitter.emit("done");
+        globHTML.emit("getReady");
 
-      if (serverSentEvents) {
-        const file = files.pop()!.replace(".ts", ".js"); // Only one filed was modified
-        const [buildFilename] = getBuildNames(file);
-        const js = fs.readFileSync(buildFilename, { encoding: "utf8" });
-        serverSentEvents({
-          js,
-          filename: buildFilename.split(`${BUILD_FOLDER}/`).pop()!,
-        });
+        if (serverSentEvents) {
+          const changedFile = file!.replace(".ts", ".js"); // Only one filed was modified
+          const [buildFilename] = getBuildNames(changedFile);
+          const js = fs.readFileSync(buildFilename, { encoding: "utf8" });
+          serverSentEvents({
+            js,
+            filename: buildFilename.split(`${BUILD_FOLDER}/`).pop()!,
+          });
+        }
       }
-    })
-    .catch((err: Error) => {
-      console.error(err);
     });
 }
 
@@ -321,7 +311,10 @@ function minifyHTML(filename: string, buildFilename: string) {
       if (!scriptTextNode?.value || isReferencedScript) return;
 
       // Use bundled file and remove it from fs
-      const bundledFilename = buildFilename.replace(".html", `-${index}.js`);
+      const bundledFilename = buildFilename.replace(
+        ".html",
+        `-bundle-${index}.js`
+      );
       try {
         const scriptContent = fs.readFileSync(bundledFilename, {
           encoding: "utf-8",
@@ -429,22 +422,23 @@ function rebuild(filename: string) {
   const [buildFilename] = getBuildNames(filename);
 
   if (filename.endsWith(".html")) {
-    glob(`${SOURCE_FOLDER}/**/*.html`, {}, (err, files) => {
+    glob(`${SOURCE_FOLDER}/**/*.html`, {}, async (err, files) => {
       errorHandler(err);
 
-      createGlobalJS(files);
+      await createGlobalJS(files);
       minifyHTML(filename, buildFilename);
     });
-  } else if (filename.endsWith(".ts") || filename.endsWith(".js")) {
-    minifyTSJS([filename]);
+  } else if (/\.(j|t)sx?$/.test(filename)) {
+    JSTSFiles.add(filename);
+    minifyTSJS(false, filename).catch(console.error);
   } else if (filename.endsWith(".css")) {
     minifyCSS(filename, buildFilename);
 
     if (isCritical) {
-      glob(`${SOURCE_FOLDER}/**/*.html`, {}, (err, files) => {
+      glob(`${SOURCE_FOLDER}/**/*.html`, {}, async (err, files) => {
         errorHandler(err);
 
-        createGlobalJS(files);
+        await createGlobalJS(files);
         files.forEach((file) => {
           const [buildFilenameHTML] = getBuildNames(file);
           minifyHTML(file, buildFilenameHTML);
