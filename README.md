@@ -27,7 +27,7 @@ $ npm run build
 
 ## CLI
 
-`--hmr`: boots up a static server and enables Hot Module Replacement.<br>
+`--hmr`: boots up a static server and enables Hot Module Replacement. This works at its best with non-root HTML files without file references.<br>
 `--critical`: uses [critical](https://www.npmjs.com/package/critical) to extract and inline critical-path CSS to HTML.
 
 ## Concept
@@ -35,6 +35,8 @@ $ npm run build
 The bundler always globs all HTML, CSS and TS/JS files from the `src/` directory and processes them to the `build/` directory. PostCSS is being used for CSS files and inline styles, html-minifier for HTML and esbuild to bundle, minify, etc. for inline and referenced TS/JS. There are no <strong>regexes</strong>, just <strong>AST</strong> transformations. Server-sent events and [hydro-js](https://github.com/Krutsch/hydro-js) are used for HMR.
 
 ## Example hydro-js
+
+Have a look at [hydro-starter](https://github.com/Krutsch/hydro-starter).
 
 #### Input
 

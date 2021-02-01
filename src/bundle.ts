@@ -61,6 +61,11 @@ taskEmitter.on("done", () => {
       let hasJSTS = false;
 
       watcher.on("add", (filename) => {
+        // Return if it was added by the build system itself
+        if (/-bundle-\d+\.(j|t)sx?$/.test(filename)) {
+          return;
+        }
+
         filename = String.raw`${filename}`.replace(/\\/g, "/");
         if (filename.endsWith(".html") || filename.endsWith(".css")) {
           initialAdd++;
@@ -79,6 +84,11 @@ taskEmitter.on("done", () => {
         });
       });
       watcher.on("change", (filename) => {
+        // Return if it was changed by the build system itself
+        if (/-bundle-\d+\.(j|t)sx?$/.test(filename)) {
+          return;
+        }
+
         filename = String.raw`${filename}`.replace(/\\/g, "/");
         rebuild(filename);
         const [buildFilename] = getBuildNames(filename);
@@ -93,7 +103,7 @@ taskEmitter.on("done", () => {
         filename = String.raw`${filename}`.replace(/\\/g, "/");
         JSTSFiles.delete(filename);
         const [buildFilename, buildPathDir] = getBuildNames(filename);
-        fs.rm(buildFilename.replace(".ts", ".js"), (err) => {
+        fs.rm(tsMaybeX2JS(buildFilename), (err) => {
           errorHandler(err);
 
           console.log(`⚡ deleted ${buildFilename}`);
@@ -215,7 +225,7 @@ function createGlobalJS(files: Array<string>) {
       const scriptContent = scriptTextNode?.value;
       if (!scriptContent || isReferencedScript) return;
 
-      const jsFilename = filename.replace(".html", `-bundle-${index}.ts`);
+      const jsFilename = filename.replace(".html", `-bundle-${index}.js`);
       scriptFilenames.push(jsFilename);
       fs.writeFileSync(jsFilename, scriptContent);
     });
@@ -255,7 +265,7 @@ function minifyTSJS(isInline: boolean = false, file?: string): Promise<any> {
         globHTML.emit("getReady");
 
         if (serverSentEvents) {
-          const changedFile = file!.replace(".ts", ".js"); // Only one filed was modified
+          const changedFile = tsMaybeX2JS(file!);
           const [buildFilename] = getBuildNames(changedFile);
           const js = fs.readFileSync(buildFilename, { encoding: "utf8" });
           serverSentEvents({
@@ -269,7 +279,7 @@ function minifyTSJS(isInline: boolean = false, file?: string): Promise<any> {
 
 function minifyCSS(filename: string, buildFilename: string) {
   const fileText = fs.readFileSync(filename, { encoding: "utf-8" });
-  CSSprocessor.process(fileText, {
+  return CSSprocessor.process(fileText, {
     ...(options as ProcessOptions),
     from: filename,
     to: buildFilename,
@@ -291,111 +301,107 @@ function minifyCSS(filename: string, buildFilename: string) {
     });
 }
 
-function minifyHTML(filename: string, buildFilename: string) {
-  fs.readFile(filename, { encoding: "utf-8" }, async (err, fileText) => {
-    errorHandler(err);
+async function minifyHTML(filename: string, buildFilename: string) {
+  let fileText = fs.readFileSync(filename, { encoding: "utf-8" });
 
-    let DOM;
-    if (fileText.includes("<!DOCTYPE html>") || fileText.includes("<html")) {
-      DOM = parse(fileText);
-    } else {
-      DOM = parseFragment(fileText);
-    }
+  let DOM;
+  if (fileText.includes("<!DOCTYPE html>") || fileText.includes("<html")) {
+    DOM = parse(fileText);
+  } else {
+    DOM = parseFragment(fileText);
+  }
 
-    // Minify Code
-    const scripts = findElements(DOM, (e) => getTagName(e) === "script");
-    scripts.forEach((script, index) => {
-      const scriptTextNode = script.childNodes[0];
-      const isReferencedScript = script.attrs.find((a) => a.name === "src");
-      //@ts-ignore
-      if (!scriptTextNode?.value || isReferencedScript) return;
+  // Minify Code
+  const scripts = findElements(DOM, (e) => getTagName(e) === "script");
+  scripts.forEach((script, index) => {
+    const scriptTextNode = script.childNodes[0];
+    const isReferencedScript = script.attrs.find((a) => a.name === "src");
+    //@ts-ignore
+    if (!scriptTextNode?.value || isReferencedScript) return;
 
-      // Use bundled file and remove it from fs
-      const bundledFilename = buildFilename.replace(
-        ".html",
-        `-bundle-${index}.js`
-      );
-      try {
-        const scriptContent = fs.readFileSync(bundledFilename, {
-          encoding: "utf-8",
-        });
-        fs.rmSync(bundledFilename);
-        // Replace src with bundled code
-        //@ts-ignore
-        scriptTextNode.value = scriptContent.replace(
-          TEMPLATE_LITERAL_MINIFIER,
-          " "
-        );
-      } catch {}
-    });
-
-    // Minify Inline Style
-    const styles = findElements(DOM, (e) => getTagName(e) === "style");
-    for (const style of styles) {
-      const node = style.childNodes[0];
-      //@ts-ignore
-      const styleContent = node?.value;
-      if (!styleContent) continue;
-
-      const { css } = await CSSprocessor.process(styleContent, {
-        ...(options as ProcessOptions),
-        from: undefined,
+    // Use bundled file and remove it from fs
+    const bundledFilename = buildFilename.replace(
+      ".html",
+      `-bundle-${index}.js`
+    );
+    try {
+      const scriptContent = fs.readFileSync(bundledFilename, {
+        encoding: "utf-8",
       });
+      fs.rmSync(bundledFilename);
+      // Replace src with bundled code
       //@ts-ignore
-      node.value = css;
-    }
+      scriptTextNode.value = scriptContent.replace(
+        TEMPLATE_LITERAL_MINIFIER,
+        " "
+      );
+    } catch {}
+  });
 
-    fileText = serialize(DOM);
+  // Minify Inline Style
+  const styles = findElements(DOM, (e) => getTagName(e) === "style");
+  for (const style of styles) {
+    const node = style.childNodes[0];
+    //@ts-ignore
+    const styleContent = node?.value;
+    if (!styleContent) continue;
 
-    // Minify HTML
-    fileText = minify(fileText, {
-      collapseWhitespace: true,
+    const { css } = await CSSprocessor.process(styleContent, {
+      ...(options as ProcessOptions),
+      from: undefined,
     });
+    //@ts-ignore
+    node.value = css;
+  }
 
-    if (isCritical) {
-      const buildFilenameArr = buildFilename.split("/");
-      const fileWithBase = buildFilenameArr.pop();
-      const buildDir = buildFilenameArr.join("/");
+  fileText = serialize(DOM);
 
-      // critical is generating the files on the fs
-      critical
-        .generate({
-          base: buildDir,
-          html: fileText,
-          target: fileWithBase,
-          minify: true,
-          inline: true,
-          extract: true,
-          rebase: () => {},
-        })
-        .then(({ html }: any) => {
-          taskEmitter.emit("done");
+  // Minify HTML
+  fileText = minify(fileText, {
+    collapseWhitespace: true,
+  });
 
-          if (serverSentEvents) {
-            serverSentEvents({
-              html: addHMRCode(html, buildFilename),
-              filename: buildFilename,
-            });
-          }
-        })
-        .catch((err: Error) => {
-          console.error(err);
-        });
-    } else {
-      fs.writeFile(buildFilename, fileText, (err) => {
-        errorHandler(err);
+  if (isCritical) {
+    const buildFilenameArr = buildFilename.split("/");
+    const fileWithBase = buildFilenameArr.pop();
+    const buildDir = buildFilenameArr.join("/");
 
+    // critical is generating the files on the fs
+    return critical
+      .generate({
+        base: buildDir,
+        html: fileText,
+        target: fileWithBase,
+        minify: true,
+        inline: true,
+        extract: true,
+        rebase: () => {},
+      })
+      .then(({ html }: any) => {
         taskEmitter.emit("done");
 
         if (serverSentEvents) {
           serverSentEvents({
-            html: addHMRCode(fileText, buildFilename),
+            html: addHMRCode(html, buildFilename),
             filename: buildFilename,
           });
         }
+      })
+      .catch((err: Error) => {
+        console.error(err);
+      });
+  } else {
+    fs.writeFileSync(buildFilename, fileText);
+
+    taskEmitter.emit("done");
+
+    if (serverSentEvents) {
+      serverSentEvents({
+        html: addHMRCode(fileText, buildFilename),
+        filename: buildFilename,
       });
     }
-  });
+  }
 }
 
 // Helper functions from here
@@ -418,34 +424,42 @@ function getBuildNames(filename: string) {
   return [buildFilename, buildPathDir];
 }
 
-function rebuild(filename: string) {
+async function rebuild(filename: string) {
   const [buildFilename] = getBuildNames(filename);
 
-  if (filename.endsWith(".html")) {
-    glob(`${SOURCE_FOLDER}/**/*.html`, {}, async (err, files) => {
-      errorHandler(err);
-
-      await createGlobalJS(files);
-      minifyHTML(filename, buildFilename);
-    });
-  } else if (/\.(j|t)sx?$/.test(filename)) {
+  if (/\.(j|t)sx?$/.test(filename)) {
     JSTSFiles.add(filename);
-    minifyTSJS(false, filename).catch(console.error);
   } else if (filename.endsWith(".css")) {
-    minifyCSS(filename, buildFilename);
-
-    if (isCritical) {
-      glob(`${SOURCE_FOLDER}/**/*.html`, {}, async (err, files) => {
-        errorHandler(err);
-
-        await createGlobalJS(files);
-        files.forEach((file) => {
-          const [buildFilenameHTML] = getBuildNames(file);
-          minifyHTML(file, buildFilenameHTML);
-        });
-      });
-    }
+    await minifyCSS(filename, buildFilename);
   }
+
+  glob(`${SOURCE_FOLDER}/**/*.html`, {}, async (err, files) => {
+    errorHandler(err);
+
+    await createGlobalJS(files);
+    if (filename.endsWith(".html")) {
+      minifyHTML(filename, buildFilename);
+    } else if (
+      /\.(j|t)sx?$/.test(filename) ||
+      (filename.endsWith(".css") && isCritical)
+    ) {
+      for (const htmlFilename of files) {
+        const [htmlBuildFilename] = getBuildNames(htmlFilename);
+        await minifyHTML(htmlFilename, htmlBuildFilename);
+      }
+
+      if (/\.(j|t)sx?$/.test(filename) && serverSentEvents) {
+        const jsFile = tsMaybeX2JS(buildFilename);
+        try {
+          // Do not try to send empty files
+          serverSentEvents({
+            js: fs.readFileSync(jsFile, { encoding: "utf-8" }),
+            filename: jsFile.split(`${BUILD_FOLDER}/`).pop()!,
+          });
+        } catch {}
+      }
+    }
+  });
 }
 
 const getHMRCode = (
@@ -611,4 +625,8 @@ function errorHandler(err: Error | null) {
     console.error(err);
     process.exit(1);
   }
+}
+
+function tsMaybeX2JS(filename: string): string {
+  return filename.replace(".ts", ".js").replace(".jsx", ".js");
 }
