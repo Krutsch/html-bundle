@@ -28,6 +28,7 @@ $ npm run build
 ## CLI
 
 `--hmr`: boots up a static server and enables Hot Module Replacement. This works at its best with non-root HTML files without file references.<br>
+`--secure`: starts the hmr server as a secure HTTP2 over HTTPS instance. This requires the files `localhost.pem` and `localhost-key.pem` in the root folder. You can generate them with [mkcert](https://github.com/FiloSottile/mkcert) for instance.
 `--critical`: uses [critical](https://www.npmjs.com/package/critical) to extract and inline critical-path CSS to HTML.
 
 ## Concept

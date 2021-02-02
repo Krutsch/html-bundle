@@ -5,7 +5,11 @@ import { performance } from "perf_hooks";
 import Event from "events";
 import glob from "glob";
 import path from "path";
-import Fastify, { FastifyReply, FastifyRequest } from "fastify";
+import Fastify, {
+  FastifyReply,
+  FastifyRequest,
+  FastifyServerOptions,
+} from "fastify";
 import fastifyStatic from "fastify-static";
 import postcss, { AcceptedPlugin, ProcessOptions } from "postcss";
 import postcssrc from "postcss-load-config";
@@ -29,6 +33,7 @@ console.clear(); // findElement is logging an array for no reason
 // CLI and options
 const isCritical = process.argv.includes("--critical");
 const isHMR = process.argv.includes("--hmr");
+const isSecure = process.argv.includes("--isSecure");
 if (isHMR) {
   process.env.NODE_ENV = "development";
 } else {
@@ -131,7 +136,17 @@ type serverSentEventObject = (
 let serverSentEvents: undefined | ((data: serverSentEventObject) => void);
 let fastify: ReturnType<typeof Fastify>;
 if (isHMR) {
-  fastify = Fastify();
+  fastify = Fastify(
+    isSecure
+      ? ({
+          http2: true,
+          https: {
+            key: fs.readFileSync(path.join(process.cwd(), "localhost-key.pem")),
+            cert: fs.readFileSync(path.join(process.cwd(), "localhost.pem")),
+          },
+        } as FastifyServerOptions)
+      : void 0
+  );
   fastify.register(fastifyStatic, {
     root: path.join(process.cwd(), BUILD_FOLDER),
   });

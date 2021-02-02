@@ -19,6 +19,7 @@ console.clear(); // findElement is logging an array for no reason
 // CLI and options
 const isCritical = process.argv.includes("--critical");
 const isHMR = process.argv.includes("--hmr");
+const isSecure = process.argv.includes("--isSecure");
 if (isHMR) {
     process.env.NODE_ENV = "development";
 }
@@ -103,7 +104,15 @@ let htmlTasks = 0;
 let serverSentEvents;
 let fastify;
 if (isHMR) {
-    fastify = Fastify();
+    fastify = Fastify(isSecure
+        ? {
+            http2: true,
+            https: {
+                key: fs.readFileSync(path.join(process.cwd(), "localhost-key.pem")),
+                cert: fs.readFileSync(path.join(process.cwd(), "localhost.pem")),
+            },
+        }
+        : void 0);
     fastify.register(fastifyStatic, {
         root: path.join(process.cwd(), BUILD_FOLDER),
     });
