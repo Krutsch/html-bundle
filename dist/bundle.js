@@ -19,7 +19,7 @@ console.clear(); // findElement is logging an array for no reason
 // CLI and options
 const isCritical = process.argv.includes("--critical");
 const isHMR = process.argv.includes("--hmr");
-const isSecure = process.argv.includes("--isSecure");
+const isSecure = process.argv.includes("--secure");
 if (isHMR) {
     process.env.NODE_ENV = "development";
 }
