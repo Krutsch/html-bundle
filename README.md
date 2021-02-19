@@ -18,6 +18,18 @@ Add an entry to script in package.json (see flags below).
 }
 ```
 
+or ideally
+
+```json
+{
+  "scripts": {
+    "dev": "html-bundle --hmr --secure",
+    "build": "html-bundle --critical",
+    "serve": "html-bundle --serveOnly --secure"
+  }
+}
+```
+
 Add a `postcss.config.cjs` file and run the build command.
 <em>If you do not create this config file, a minimal in-memory config file will be created with `cssnano` as plugin.</em>
 
@@ -27,8 +39,9 @@ $ npm run build
 
 ## CLI
 
+`--serveOnly`: boots up a static server for the build folder (fastify)<br>
+`--secure`: creates a secure HTTP2 over HTTPS instance. This requires the files `localhost.pem` and `localhost-key.pem` in the root folder. You can generate them with [mkcert](https://github.com/FiloSottile/mkcert) for instance.
 `--hmr`: boots up a static server and enables Hot Module Replacement. This works at its best with non-root HTML files without file references.<br>
-`--secure`: starts the hmr server as a secure HTTP2 over HTTPS instance. This requires the files `localhost.pem` and `localhost-key.pem` in the root folder. You can generate them with [mkcert](https://github.com/FiloSottile/mkcert) for instance.
 `--critical`: uses [critical](https://www.npmjs.com/package/critical) to extract and inline critical-path CSS to HTML.
 
 ## Concept
