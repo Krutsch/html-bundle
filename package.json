@@ -44,7 +44,7 @@
     "cssnano": "^4.1.10",
     "esbuild": "^0.8.46",
     "fastify": "^3.12.0",
-    "fastify-static": "^3.4.0",
+    "fastify-static": "^4.0.0",
     "glob": "^7.1.6",
     "html-minifier-terser": "^5.1.1",
     "parse5": "^6.0.1",
