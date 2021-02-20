@@ -1,6 +1,6 @@
 # html-bundle
 
-> A very simple zero-config bundler for HTML files. The idea is to use HTML as Single File Components, because HTML can already include `<style>` and `<script>` elements. Additionally, `TypeScript` can be used as inline or referenced script in HTML.
+> A very simple zero-config bundler for HTML files. The idea is to use HTML as Single File Components, because HTML can already include `<style>` and `<script>` elements. Additionally, `TypeScript` and `JSX` can be used as inline or referenced script in HTML.
 
 ## Installation and Usage
 
@@ -50,7 +50,8 @@ The bundler always globs all HTML, CSS and TS/JS files from the `src/` directory
 
 ## Example hydro-js
 
-Have a look at [hydro-starter](https://github.com/Krutsch/hydro-starter).
+Have a look at [hydro-starter](https://github.com/Krutsch/hydro-starter).<br>
+Set `"jsxFactory": "h"` in `tsconfig.json` for JSX.
 
 #### Input
 
@@ -63,8 +64,13 @@ Have a look at [hydro-starter](https://github.com/Krutsch/hydro-starter).
     <title>Example</title>
     <meta name="Description" content="Example for html-bundle" />
     <script type="module">
-      import { render, html } from "hydro-js";
-      render(html`<main id="app">Testing html-bundle</main>`, "#app");
+      import { render, html, h } from "hydro-js";
+
+      function Example() {
+        return <main id="app">Testing html-bundle</main>;
+      }
+
+      render(<Example />, "#app");
     </script>
     <style>
       body {
@@ -84,6 +90,8 @@ Have a look at [hydro-starter](https://github.com/Krutsch/hydro-starter).
 
 ## Example Vue.js
 
+Set `"jsxFactory": "h"` in `tsconfig.json`.
+
 ```html
 <!DOCTYPE html>
 <html lang="en">
@@ -94,8 +102,6 @@ Have a look at [hydro-starter](https://github.com/Krutsch/hydro-starter).
   </head>
   <script type="module">
     import { createApp, h } from "vue";
-    import htm from "htm";
-    const html = htm.bind(h);
 
     const App = {
       data() {
@@ -104,7 +110,7 @@ Have a look at [hydro-starter](https://github.com/Krutsch/hydro-starter).
         };
       },
       render() {
-        return html`<p>${this.name}</p>`;
+        return <p>{this.name}</p>;
       },
     };
 
@@ -112,6 +118,41 @@ Have a look at [hydro-starter](https://github.com/Krutsch/hydro-starter).
   </script>
   <body>
     <div id="app"></div>
+  </body>
+</html>
+```
+
+## Example React
+
+Set `"jsxFactory": "React.createElement"` in `tsconfig.json`.
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>React Example</title>
+  </head>
+  <script type="module">
+    import React, { useState } from "react";
+    import { render } from "react-dom";
+
+    function Example() {
+      const [count, setCount] = useState(0);
+
+      return (
+        <div>
+          <p>You clicked {count} times</p>
+          <button onClick={() => setCount(count + 1)}>Click me</button>
+        </div>
+      );
+    }
+
+    render(<Example />, document.getElementById("root"));
+  </script>
+  <body>
+    <div id="root"></div>
   </body>
 </html>
 ```
