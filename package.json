@@ -1,6 +1,6 @@
 {
   "name": "html-bundle",
-  "version": "5.3.7",
+  "version": "5.3.8",
   "description": "A very simple bundler for HTML SFC",
   "type": "module",
   "bin": "./dist/bundle.js",
@@ -42,7 +42,7 @@
     "chokidar": "^3.5.1",
     "critical": "^2.0.6",
     "cssnano": "^4.1.10",
-    "esbuild": "^0.8.49",
+    "esbuild": "^0.8.50",
     "fastify": "^3.12.0",
     "fastify-static": "^4.0.0",
     "glob": "^7.1.6",

@@ -383,6 +383,7 @@ if (isServeOnly) {
     // Minify HTML
     fileText = minify(fileText, {
       collapseWhitespace: true,
+      removeComments: true,
     });
 
     if (isCritical) {
