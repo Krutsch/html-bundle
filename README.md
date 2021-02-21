@@ -64,7 +64,7 @@ Set `"jsxFactory": "h"` in `tsconfig.json` for JSX.
     <title>Example</title>
     <meta name="Description" content="Example for html-bundle" />
     <script type="module">
-      import { render, html, h } from "hydro-js";
+      import { render, h } from "hydro-js";
 
       function Example() {
         return <main id="app">Testing html-bundle</main>;
