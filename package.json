@@ -42,7 +42,7 @@
     "chokidar": "^3.5.1",
     "critical": "^3.0.0",
     "cssnano": "^4.1.10",
-    "esbuild": "^0.8.50",
+    "esbuild": "^0.9.0",
     "fastify": "^3.12.0",
     "fastify-static": "^4.0.0",
     "glob": "^7.1.6",
