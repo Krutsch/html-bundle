@@ -34,8 +34,8 @@ else {
     else {
         process.env.NODE_ENV = "production";
     }
-    const { plugins, options } = createPostCSSConfig();
-    const CSSprocessor = postcss(plugins);
+    let { plugins, options, file } = createPostCSSConfig();
+    let CSSprocessor = postcss(plugins);
     // Performance Observer and file watcher
     const globHTML = new Event.EventEmitter();
     const taskEmitter = new Event.EventEmitter();
@@ -47,6 +47,23 @@ else {
         if (finishedTasks === expectedTasks) {
             console.log(`🚀 Build finished in ${(performance.now() - start).toFixed(2)}ms ✨`);
             if (isHMR) {
+                const postCSSWatcher = watch(file);
+                postCSSWatcher.on("change", () => {
+                    console.log("⚡ modified postcss.config – CSS will rebuild now.");
+                    const newConfig = createPostCSSConfig();
+                    plugins = newConfig.plugins;
+                    options = newConfig.options;
+                    CSSprocessor = postcss(plugins);
+                    glob(`${SOURCE_FOLDER}/**/*.css`, {}, (err, files) => {
+                        errorHandler(err);
+                        expectedTasks += files.length;
+                        for (const filename of files) {
+                            const [buildFilename, buildPathDir] = getBuildNames(filename);
+                            fs.mkdirSync(buildPathDir, { recursive: true });
+                            minifyCSS(filename, buildFilename);
+                        }
+                    });
+                });
                 console.log(`⌛ Waiting for file changes ...`);
                 const watcher = watch(SOURCE_FOLDER);
                 // The add watcher will add all the files initially - do not rebuild them
@@ -363,7 +380,7 @@ else {
             return postcssrc.sync({});
         }
         catch {
-            return { plugins: [cssnano], options: {} };
+            return { plugins: [cssnano], options: {}, file: "" };
         }
     }
     function getBuildNames(filename) {
@@ -449,7 +466,14 @@ if (!window.eventsource${id}) {
           template.remove();
         }
       } else {
+        const oldElementCount = document.body.querySelectorAll('*').length;
         render(newHTML, document.documentElement);
+        const newElementCount = document.body.querySelectorAll('*').length;
+
+        // Looks like JS did not reload? Last resort - hard refresh
+        if (newElementCount < 5 && Math.abs(newElementCount - oldElementCount) > 10) {
+          location.reload() 
+        }
       }
       setInsertDiffing(false);
     } else if ("css" in dataObj) {

@@ -1,6 +1,6 @@
 {
   "name": "html-bundle",
-  "version": "5.3.8",
+  "version": "5.4.0",
   "description": "A very simple bundler for HTML SFC",
   "type": "module",
   "bin": "./dist/bundle.js",
@@ -30,7 +30,7 @@
     "@types/html-minifier-terser": "^5.1.1",
     "@types/parse5": "^6.0.0",
     "@types/postcss-load-config": "^2.0.1",
-    "typescript": "^4.1.5"
+    "typescript": "^4.2.3"
   },
   "repository": {
     "type": "git",
@@ -38,17 +38,17 @@
   },
   "bugs": "https://github.com/Krutsch/html-bundle/issues",
   "dependencies": {
-    "@web/parse5-utils": "^1.2.1",
+    "@web/parse5-utils": "^1.2.2",
     "chokidar": "^3.5.1",
     "critical": "^3.0.0",
     "cssnano": "^4.1.10",
     "esbuild": "^0.11.0",
-    "fastify": "^3.12.0",
-    "fastify-static": "^4.0.0",
+    "fastify": "^3.14.1",
+    "fastify-static": "^4.0.1",
     "glob": "^7.1.6",
     "html-minifier-terser": "^5.1.1",
     "parse5": "^6.0.1",
-    "postcss": "^8.2.6",
+    "postcss": "^8.2.8",
     "postcss-load-config": "^3.0.1"
   }
 }
