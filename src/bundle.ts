@@ -66,24 +66,26 @@ if (isServeOnly) {
       );
 
       if (isHMR) {
-        const postCSSWatcher = watch(file);
-        postCSSWatcher.on("change", () => {
-          console.log("⚡ modified postcss.config – CSS will rebuild now.");
-          const newConfig = createPostCSSConfig();
-          plugins = newConfig.plugins;
-          options = newConfig.options;
-          CSSprocessor = postcss(plugins as AcceptedPlugin[]);
+        if (file) {
+          const postCSSWatcher = watch(file);
+          postCSSWatcher.on("change", () => {
+            console.log("⚡ modified postcss.config – CSS will rebuild now.");
+            const newConfig = createPostCSSConfig();
+            plugins = newConfig.plugins;
+            options = newConfig.options;
+            CSSprocessor = postcss(plugins as AcceptedPlugin[]);
 
-          glob(`${SOURCE_FOLDER}/**/*.css`, {}, (err, files) => {
-            errorHandler(err);
-            expectedTasks += files.length;
-            for (const filename of files) {
-              const [buildFilename, buildPathDir] = getBuildNames(filename);
-              fs.mkdirSync(buildPathDir, { recursive: true });
-              minifyCSS(filename, buildFilename);
-            }
+            glob(`${SOURCE_FOLDER}/**/*.css`, {}, (err, files) => {
+              errorHandler(err);
+              expectedTasks += files.length;
+              for (const filename of files) {
+                const [buildFilename, buildPathDir] = getBuildNames(filename);
+                fs.mkdirSync(buildPathDir, { recursive: true });
+                minifyCSS(filename, buildFilename);
+              }
+            });
           });
-        });
+        }
 
         console.log(`⌛ Waiting for file changes ...`);
         const watcher = watch(SOURCE_FOLDER);
