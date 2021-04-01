@@ -462,10 +462,14 @@ if (!window.eventsource${id}) {
             }
         });
         for (let rest = hmrWheres.length; rest < hmrElems.length; rest++) {
-          const template = document.createElement('template');
-          hmrElems[hmrWheres.length].after(template);
-          render(hmrElems[rest], template);
-          template.remove();
+          if (hmrWheres.length) {
+            const template = document.createElement('template');
+            hmrElems[hmrWheres.length - 1].after(template);
+            render(hmrElems[rest], template);
+            template.remove();
+          } else {
+            render(hmrElems[rest])
+          }
         }
       } else {
         const oldElementCount = document.body.querySelectorAll('*').length;
