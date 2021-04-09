@@ -33,6 +33,7 @@ console.clear(); // findElement is logging an array for no reason
 // CLI and options
 const isCritical = process.argv.includes("--critical");
 const isHMR = process.argv.includes("--hmr");
+const isCSP = process.argv.includes("--csp");
 const isSecure = process.argv.includes("--secure");
 const isServeOnly = process.argv.includes("--serveOnly");
 let fastify: ReturnType<typeof Fastify>;
@@ -418,7 +419,7 @@ if (isServeOnly) {
           html: fileText,
           target: fileWithBase,
           minify: true,
-          inline: true,
+          inline: !isCSP,
           extract: true,
           rebase: () => {},
         })

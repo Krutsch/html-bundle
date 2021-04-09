@@ -40,9 +40,10 @@ $ npm run build
 ## CLI
 
 `--serveOnly`: boots up a static server for the build folder (fastify)<br>
-`--secure`: creates a secure HTTP2 over HTTPS instance. This requires the files `localhost.pem` and `localhost-key.pem` in the root folder. You can generate them with [mkcert](https://github.com/FiloSottile/mkcert) for instance.
+`--secure`: creates a secure HTTP2 over HTTPS instance. This requires the files `localhost.pem` and `localhost-key.pem` in the root folder. You can generate them with [mkcert](https://github.com/FiloSottile/mkcert) for instance.<br>
 `--hmr`: boots up a static server and enables Hot Module Replacement. This works at its best with non-root HTML files without file references.<br>
-`--critical`: uses [critical](https://www.npmjs.com/package/critical) to extract and inline critical-path CSS to HTML.
+`--critical`: uses [critical](https://www.npmjs.com/package/critical) to extract and inline critical-path CSS to HTML.<br>
+`--csp`: disables inline option from `critical`.
 
 ## Concept
 
