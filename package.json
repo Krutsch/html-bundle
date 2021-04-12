@@ -41,7 +41,7 @@
     "@web/parse5-utils": "^1.2.2",
     "chokidar": "^3.5.1",
     "critical": "^3.0.0",
-    "cssnano": "^4.1.11",
+    "cssnano": "^5.0.0",
     "esbuild": "^0.11.6",
     "fastify": "^3.14.2",
     "fastify-static": "^4.0.1",
