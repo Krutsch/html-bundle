@@ -1,6 +1,8 @@
 # html-bundle
 
-> A very simple zero-config bundler for HTML files. The idea is to use HTML as Single File Components, because HTML can already include `<style>` and `<script>` elements. Additionally, `TypeScript` and `JSX` can be used as inline or referenced script in HTML.
+> A very simple zero-config bundler primarily for HTML files. The idea is to use HTML as Single File Components, because HTML can already include `<style>` and `<script>` elements. Additionally, `TypeScript` and `JSX` can be used as inline or referenced script in HTML.
+
+![Demo](./example.gif)
 
 ## Installation and Usage
 

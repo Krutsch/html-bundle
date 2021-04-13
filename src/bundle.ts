@@ -282,7 +282,9 @@ if (isServeOnly) {
       .finally(() =>
         scriptFilenames.forEach((file) => {
           JSTSFiles.delete(file);
-          fs.rmSync(file);
+          try {
+            fs.rmSync(file);
+          } catch {}
         })
       );
   }
