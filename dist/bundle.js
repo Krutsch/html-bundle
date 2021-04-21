@@ -229,7 +229,10 @@ else {
             .catch(console.error)
             .finally(() => scriptFilenames.forEach((file) => {
             JSTSFiles.delete(file);
-            fs.rmSync(file);
+            try {
+                fs.rmSync(file);
+            }
+            catch { }
         }));
     }
     function minifyTSJS(isInline = false, file) {
@@ -551,7 +554,10 @@ if (!window.eventsource${id}) {
         // Burst CSS cache
         findElements(ast, (e) => getTagName(e) === "link").forEach((link) => {
             const href = link.attrs.find((attr) => attr.name === "href");
-            href.value += `?v=${Math.random().toFixed(4)}`;
+            const rel = link.attrs.find((attr) => attr.name === "rel");
+            if (rel.value === "stylesheet") {
+                href.value += `?v=${Math.random().toFixed(4)}`;
+            }
         });
         return serialize(ast);
     }
