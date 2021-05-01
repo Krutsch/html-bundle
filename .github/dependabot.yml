@@ -5,10 +5,3 @@ updates:
   schedule:
     interval: daily
   open-pull-requests-limit: 99
-  ignore:
-  - dependency-name: fastify
-    versions:
-    - 3.14.1
-  - dependency-name: esbuild
-    versions:
-    - 0.8.48
