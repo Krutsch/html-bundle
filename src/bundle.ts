@@ -295,7 +295,7 @@ if (isServeOnly) {
         sourcemap: isHMR,
         splitting: true,
         define: {
-          "process.env.NODE_ENV": process.env.NODE_ENV!,
+          "process.env.NODE_ENV": isHMR ? '"development"' : '"production"',
         },
         loader: { ".js": "jsx", ".ts": "tsx" },
         bundle: true,
