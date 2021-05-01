@@ -29,12 +29,7 @@ if (isServeOnly) {
     console.log(`💻 Sever listening on port 5000.`);
 }
 else {
-    if (isHMR) {
-        process.env.NODE_ENV = "development";
-    }
-    else {
-        process.env.NODE_ENV = "production";
-    }
+    process.env.NODE_ENV = isHMR ? "development" : "production";
     let { plugins, options, file } = createPostCSSConfig();
     let CSSprocessor = postcss(plugins);
     // Performance Observer and file watcher
@@ -242,9 +237,10 @@ else {
             charset: "utf8",
             format: "esm",
             incremental: isHMR,
+            sourcemap: isHMR,
             splitting: true,
             define: {
-                "process.env.NODE_ENV": isHMR ? '"development"' : '"production"',
+                "process.env.NODE_ENV": process.env.NODE_ENV,
             },
             loader: { ".js": "jsx", ".ts": "tsx" },
             bundle: true,
