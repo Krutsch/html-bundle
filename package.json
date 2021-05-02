@@ -1,8 +1,7 @@
 {
   "name": "html-bundle",
-  "version": "5.4.11",
+  "version": "5.4.12",
   "description": "A very simple bundler for HTML SFC",
-  "type": "module",
   "bin": "./cjs/bundle.js",
   "scripts": {
     "start": "tsc",
