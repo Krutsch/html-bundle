@@ -1,6 +1,6 @@
 {
   "name": "html-bundle",
-  "version": "5.4.9",
+  "version": "5.4.10",
   "description": "A very simple bundler for HTML SFC",
   "type": "module",
   "bin": "./esm/bundle.js",
