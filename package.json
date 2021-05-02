@@ -1,17 +1,11 @@
 {
   "name": "html-bundle",
-  "version": "5.4.10",
+  "version": "5.4.11",
   "description": "A very simple bundler for HTML SFC",
   "type": "module",
-  "bin": "./esm/bundle.js",
-  "main": "./esm/bundle.js",
-  "exports": {
-    "require": "./cjs/bundle.js",
-    "import": "./esm/bundle.js",
-    "default": "./esm/bundle.js"
-  },
+  "bin": "./cjs/bundle.js",
   "scripts": {
-    "start": "tsc && tsc -p tsconfig.cjs.json",
+    "start": "tsc",
     "update": "npx npm-check-updates -u && npx typesync && npm i && npm outdated"
   },
   "keywords": [
