@@ -22,7 +22,6 @@ const html_minifier_terser_1 = require("html-minifier-terser");
 const chokidar_1 = require("chokidar");
 const parse5_1 = require("parse5");
 const parse5_utils_1 = require("@web/parse5-utils");
-console.clear(); // findElement is logging an array for no reason
 // CLI and options
 const isCritical = process.argv.includes("--critical");
 const isHMR = process.argv.includes("--hmr");

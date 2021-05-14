@@ -1,10 +1,10 @@
 {
   "name": "html-bundle",
-  "version": "5.4.12",
+  "version": "5.4.13",
   "description": "A very simple bundler for HTML SFC",
   "bin": "./cjs/bundle.js",
   "scripts": {
-    "start": "tsc",
+    "start": "tsc && tsc -p tsconfig.cjs.json",
     "update": "npx npm-check-updates -u && npx typesync && npm i && npm outdated"
   },
   "keywords": [
@@ -35,7 +35,7 @@
     "chokidar": "^3.5.1",
     "critical": "^3.0.1",
     "cssnano": "^5.0.2",
-    "esbuild": "^0.11.20",
+    "esbuild": "^0.11.21",
     "fastify": "^3.15.1",
     "fastify-static": "^4.0.1",
     "glob": "^7.1.7",
