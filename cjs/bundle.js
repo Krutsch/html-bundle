@@ -147,6 +147,16 @@ if (isServeOnly) {
           }
         : void 0
     );
+    fastify.setNotFoundHandler((_req, reply) => {
+      const file = fs_1.default.readFileSync(
+        path_1.default.join(process.cwd(), BUILD_FOLDER, "/index.html"),
+        {
+          encoding: "utf-8",
+        }
+      );
+      reply.header("Content-Type", "text/html; charset=UTF-8");
+      return reply.send(addHMRCode(file, "/index.html"));
+    });
     fastify.register(fastify_static_1.default, {
       root: path_1.default.join(process.cwd(), BUILD_FOLDER),
     });
