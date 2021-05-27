@@ -155,7 +155,7 @@ if (isServeOnly) {
         }
       );
       reply.header("Content-Type", "text/html; charset=UTF-8");
-      return reply.send(addHMRCode(file, "/index.html"));
+      return reply.send(addHMRCode(file, "build/index.html"));
     });
     fastify.register(fastify_static_1.default, {
       root: path_1.default.join(process.cwd(), BUILD_FOLDER),
@@ -537,6 +537,7 @@ if (!window.eventsource${id}) {
         }
       }
       setInsertDiffing(false);
+      dispatchEvent(new Event("popstate"));
     } else if ("css" in dataObj) {
       window.onceEveryXTime(100, window.updateCSS, [updateAttr]);
     } else if ("js" in dataObj) {

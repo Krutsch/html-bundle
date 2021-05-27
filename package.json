@@ -1,6 +1,6 @@
 {
   "name": "html-bundle",
-  "version": "5.4.14",
+  "version": "5.4.15",
   "description": "A very simple bundler for HTML SFC",
   "bin": "./cjs/bundle.js",
   "scripts": {
@@ -23,7 +23,7 @@
     "@types/html-minifier-terser": "^5.1.1",
     "@types/parse5": "^6.0.0",
     "@types/postcss-load-config": "^3.0.1",
-    "typescript": "^4.2.4"
+    "typescript": "^4.3.2"
   },
   "repository": {
     "type": "git",
@@ -35,8 +35,8 @@
     "chokidar": "^3.5.1",
     "critical": "^3.0.1",
     "cssnano": "^5.0.4",
-    "esbuild": "^0.12.1",
-    "fastify": "^3.15.1",
+    "esbuild": "^0.12.4",
+    "fastify": "^3.16.2",
     "fastify-static": "^4.2.2",
     "glob": "^7.1.7",
     "html-minifier-terser": "^5.1.1",
