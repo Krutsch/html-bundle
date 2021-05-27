@@ -488,7 +488,9 @@ if (!window.eventsource${id}) {
         }
       }
       setInsertDiffing(false);
-      dispatchEvent(new Event("popstate"));
+      if (dataObj.filename === 'build/index.html') {
+        dispatchEvent(new Event("popstate"));
+      }
     } else if ("css" in dataObj) {
       window.onceEveryXTime(100, window.updateCSS, [updateAttr]);
     } else if ("js" in dataObj) {
