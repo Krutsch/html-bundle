@@ -39,7 +39,7 @@
     "fastify": "^3.17.0",
     "fastify-static": "^4.2.2",
     "glob": "^7.1.7",
-    "html-minifier-terser": "^5.1.1",
+    "html-minifier-terser": "^6.0.0",
     "parse5": "^6.0.1",
     "postcss": "^8.3.1",
     "postcss-load-config": "^3.0.1"
