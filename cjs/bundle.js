@@ -36,7 +36,7 @@ if (isServeOnly) {
 } else {
   process.env.NODE_ENV = isHMR ? "development" : "production";
   let { plugins, options, file } = createPostCSSConfig();
-  let CSSprocessor = postcss_1.default(plugins);
+  let CSSprocessor = (0, postcss_1.default)(plugins);
   // Performance Observer and file watcher
   const globHTML = new events_1.default.EventEmitter();
   const taskEmitter = new events_1.default.EventEmitter();
@@ -53,26 +53,30 @@ if (isServeOnly) {
       );
       if (isHMR) {
         if (file) {
-          const postCSSWatcher = chokidar_1.watch(file);
+          const postCSSWatcher = (0, chokidar_1.watch)(file);
           postCSSWatcher.on("change", () => {
             console.log("⚡ modified postcss.config – CSS will rebuild now.");
             const newConfig = createPostCSSConfig();
             plugins = newConfig.plugins;
             options = newConfig.options;
-            CSSprocessor = postcss_1.default(plugins);
-            glob_1.default(`${SOURCE_FOLDER}/**/*.css`, {}, (err, files) => {
-              errorHandler(err);
-              expectedTasks += files.length;
-              for (const filename of files) {
-                const [buildFilename, buildPathDir] = getBuildNames(filename);
-                fs_1.default.mkdirSync(buildPathDir, { recursive: true });
-                minifyCSS(filename, buildFilename);
+            CSSprocessor = (0, postcss_1.default)(plugins);
+            (0, glob_1.default)(
+              `${SOURCE_FOLDER}/**/*.css`,
+              {},
+              (err, files) => {
+                errorHandler(err);
+                expectedTasks += files.length;
+                for (const filename of files) {
+                  const [buildFilename, buildPathDir] = getBuildNames(filename);
+                  fs_1.default.mkdirSync(buildPathDir, { recursive: true });
+                  minifyCSS(filename, buildFilename);
+                }
               }
-            });
+            );
           });
         }
         console.log(`⌛ Waiting for file changes ...`);
-        const watcher = chokidar_1.watch(SOURCE_FOLDER);
+        const watcher = (0, chokidar_1.watch)(SOURCE_FOLDER);
         // The add watcher will add all the files initially - do not rebuild them
         let initialAdd = 0;
         let hasJSTS = false;
@@ -132,7 +136,7 @@ if (isServeOnly) {
   let htmlTasks = 0;
   let serverSentEvents;
   if (isHMR) {
-    fastify = fastify_1.default(
+    fastify = (0, fastify_1.default)(
       isSecure
         ? {
             http2: true,
@@ -173,7 +177,7 @@ if (isServeOnly) {
   }
   // THE BUNDLE CODE
   // Glob all files and transform the code
-  glob_1.default(`${SOURCE_FOLDER}/**/*.html`, {}, (err, files) => {
+  (0, glob_1.default)(`${SOURCE_FOLDER}/**/*.html`, {}, (err, files) => {
     errorHandler(err);
     expectedTasks += files.length;
     htmlTasks += files.length;
@@ -183,7 +187,7 @@ if (isServeOnly) {
       console.log(`💻 Sever listening on port 5000.`);
     }
   });
-  glob_1.default(`${SOURCE_FOLDER}/**/*.css`, {}, (err, files) => {
+  (0, glob_1.default)(`${SOURCE_FOLDER}/**/*.css`, {}, (err, files) => {
     errorHandler(err);
     expectedTasks += files.length;
     for (const filename of files) {
@@ -193,7 +197,7 @@ if (isServeOnly) {
     }
   });
   const JSTSFiles = new Set();
-  glob_1.default(
+  (0, glob_1.default)(
     `${SOURCE_FOLDER}/**/!(*.d).{ts,js,tsx,jsx}`,
     {},
     (err, files) => {
@@ -210,15 +214,19 @@ if (isServeOnly) {
   globHTML.on("getReady", () => {
     if (expectedTasks - htmlTasks === finishedTasks) {
       // After CSS and JS because critical needs file built css files and inline script might reference js files.
-      glob_1.default(`${SOURCE_FOLDER}/**/*.html`, {}, async (err, files) => {
-        errorHandler(err);
-        await createGlobalJS(files);
-        files.forEach((filename) => {
-          const [buildFilename, buildPathDir] = getBuildNames(filename);
-          fs_1.default.mkdirSync(buildPathDir, { recursive: true });
-          minifyHTML(filename, buildFilename);
-        });
-      });
+      (0, glob_1.default)(
+        `${SOURCE_FOLDER}/**/*.html`,
+        {},
+        async (err, files) => {
+          errorHandler(err);
+          await createGlobalJS(files);
+          files.forEach((filename) => {
+            const [buildFilename, buildPathDir] = getBuildNames(filename);
+            fs_1.default.mkdirSync(buildPathDir, { recursive: true });
+            minifyHTML(filename, buildFilename);
+          });
+        }
+      );
     }
   });
   function createGlobalJS(files) {
@@ -229,13 +237,13 @@ if (isServeOnly) {
       });
       let DOM;
       if (fileText.includes("<!DOCTYPE html>") || fileText.includes("<html")) {
-        DOM = parse5_1.parse(fileText);
+        DOM = (0, parse5_1.parse)(fileText);
       } else {
-        DOM = parse5_1.parseFragment(fileText);
+        DOM = (0, parse5_1.parseFragment)(fileText);
       }
-      const scripts = parse5_utils_1.findElements(
+      const scripts = (0, parse5_utils_1.findElements)(
         DOM,
-        (e) => parse5_utils_1.getTagName(e) === "script"
+        (e) => (0, parse5_utils_1.getTagName)(e) === "script"
       );
       scripts.forEach((script, index) => {
         const scriptTextNode = script.childNodes[0];
@@ -327,14 +335,14 @@ if (isServeOnly) {
     let fileText = fs_1.default.readFileSync(filename, { encoding: "utf-8" });
     let DOM;
     if (fileText.includes("<!DOCTYPE html>") || fileText.includes("<html")) {
-      DOM = parse5_1.parse(fileText);
+      DOM = (0, parse5_1.parse)(fileText);
     } else {
-      DOM = parse5_1.parseFragment(fileText);
+      DOM = (0, parse5_1.parseFragment)(fileText);
     }
     // Minify Code
-    const scripts = parse5_utils_1.findElements(
+    const scripts = (0, parse5_utils_1.findElements)(
       DOM,
-      (e) => parse5_utils_1.getTagName(e) === "script"
+      (e) => (0, parse5_utils_1.getTagName)(e) === "script"
     );
     scripts.forEach((script, index) => {
       const scriptTextNode = script.childNodes[0];
@@ -366,9 +374,9 @@ if (isServeOnly) {
       } catch (_a) {}
     });
     // Minify Inline Style
-    const styles = parse5_utils_1.findElements(
+    const styles = (0, parse5_utils_1.findElements)(
       DOM,
-      (e) => parse5_utils_1.getTagName(e) === "style"
+      (e) => (0, parse5_utils_1.getTagName)(e) === "style"
     );
     for (const style of styles) {
       const node = style.childNodes[0];
@@ -383,9 +391,9 @@ if (isServeOnly) {
       //@ts-ignore
       node.value = css;
     }
-    fileText = parse5_1.serialize(DOM);
+    fileText = (0, parse5_1.serialize)(DOM);
     // Minify HTML
-    fileText = html_minifier_terser_1.minify(fileText, {
+    fileText = await (0, html_minifier_terser_1.minify)(fileText, {
       collapseWhitespace: true,
       removeComments: true,
     });
@@ -452,31 +460,35 @@ if (isServeOnly) {
     } else if (filename.endsWith(".css")) {
       await minifyCSS(filename, buildFilename);
     }
-    glob_1.default(`${SOURCE_FOLDER}/**/*.html`, {}, async (err, files) => {
-      errorHandler(err);
-      await createGlobalJS(files);
-      if (filename.endsWith(".html")) {
-        minifyHTML(filename, buildFilename);
-      } else if (
-        /\.(j|t)sx?$/.test(filename) ||
-        (filename.endsWith(".css") && isCritical)
-      ) {
-        for (const htmlFilename of files) {
-          const [htmlBuildFilename] = getBuildNames(htmlFilename);
-          await minifyHTML(htmlFilename, htmlBuildFilename);
-        }
-        if (/\.(j|t)sx?$/.test(filename) && serverSentEvents) {
-          const jsFile = tsMaybeX2JS(buildFilename);
-          try {
-            // Do not try to send empty files
-            serverSentEvents({
-              js: fs_1.default.readFileSync(jsFile, { encoding: "utf-8" }),
-              filename: jsFile.split(`${BUILD_FOLDER}/`).pop(),
-            });
-          } catch (_a) {}
+    (0, glob_1.default)(
+      `${SOURCE_FOLDER}/**/*.html`,
+      {},
+      async (err, files) => {
+        errorHandler(err);
+        await createGlobalJS(files);
+        if (filename.endsWith(".html")) {
+          minifyHTML(filename, buildFilename);
+        } else if (
+          /\.(j|t)sx?$/.test(filename) ||
+          (filename.endsWith(".css") && isCritical)
+        ) {
+          for (const htmlFilename of files) {
+            const [htmlBuildFilename] = getBuildNames(htmlFilename);
+            await minifyHTML(htmlFilename, htmlBuildFilename);
+          }
+          if (/\.(j|t)sx?$/.test(filename) && serverSentEvents) {
+            const jsFile = tsMaybeX2JS(buildFilename);
+            try {
+              // Do not try to send empty files
+              serverSentEvents({
+                js: fs_1.default.readFileSync(jsFile, { encoding: "utf-8" }),
+                filename: jsFile.split(`${BUILD_FOLDER}/`).pop(),
+              });
+            } catch (_a) {}
+          }
         }
       }
-    });
+    );
   }
   const getHMRCode = (
     filename,
@@ -591,21 +603,21 @@ if (!window.eventsource${id}) {
     if (!htmlIdMap.has(filename)) {
       htmlIdMap.set(filename, randomText());
     }
-    const script = parse5_utils_1.createScript(
+    const script = (0, parse5_utils_1.createScript)(
       { type: "module" },
       getHMRCode(filename, htmlIdMap.get(filename))
     );
     let ast;
     if (html.includes("<!DOCTYPE html>") || html.includes("<html")) {
-      ast = parse5_1.parse(html);
-      const headNode = parse5_utils_1.findElement(
+      ast = (0, parse5_1.parse)(html);
+      const headNode = (0, parse5_utils_1.findElement)(
         ast,
-        (e) => parse5_utils_1.getTagName(e) === "head"
+        (e) => (0, parse5_utils_1.getTagName)(e) === "head"
       );
-      parse5_utils_1.appendChild(headNode, script);
+      (0, parse5_utils_1.appendChild)(headNode, script);
     } else {
-      ast = parse5_1.parseFragment(html);
-      parse5_utils_1.appendChild(ast, script);
+      ast = (0, parse5_1.parseFragment)(html);
+      (0, parse5_utils_1.appendChild)(ast, script);
       ast.childNodes.forEach((node) => {
         var _a;
         //@ts-ignore
@@ -615,16 +627,17 @@ if (!window.eventsource${id}) {
       });
     }
     // Burst CSS cache
-    parse5_utils_1
-      .findElements(ast, (e) => parse5_utils_1.getTagName(e) === "link")
-      .forEach((link) => {
-        const href = link.attrs.find((attr) => attr.name === "href");
-        const rel = link.attrs.find((attr) => attr.name === "rel");
-        if (rel.value === "stylesheet") {
-          href.value += `?v=${Math.random().toFixed(4)}`;
-        }
-      });
-    return parse5_1.serialize(ast);
+    (0, parse5_utils_1.findElements)(
+      ast,
+      (e) => (0, parse5_utils_1.getTagName)(e) === "link"
+    ).forEach((link) => {
+      const href = link.attrs.find((attr) => attr.name === "href");
+      const rel = link.attrs.find((attr) => attr.name === "rel");
+      if (rel.value === "stylesheet") {
+        href.value += `?v=${Math.random().toFixed(4)}`;
+      }
+    });
+    return (0, parse5_1.serialize)(ast);
   }
   function createHMRHandlers(files) {
     files.forEach((filename) => {
@@ -662,7 +675,7 @@ if (!window.eventsource${id}) {
   }
 }
 function createDefaultServer(BUILD_FOLDER = "build") {
-  fastify = fastify_1.default(
+  fastify = (0, fastify_1.default)(
     isSecure
       ? {
           http2: true,

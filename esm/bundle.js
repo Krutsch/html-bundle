@@ -339,7 +339,7 @@ else {
         }
         fileText = serialize(DOM);
         // Minify HTML
-        fileText = minify(fileText, {
+        fileText = await minify(fileText, {
             collapseWhitespace: true,
             removeComments: true,
         });
