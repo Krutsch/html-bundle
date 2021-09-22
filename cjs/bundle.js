@@ -407,7 +407,6 @@ if (isServeOnly) {
           base: buildDir,
           html: fileText,
           target: fileWithBase,
-          minify: true,
           inline: !isCSP,
           extract: true,
           rebase: () => {},
