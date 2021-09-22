@@ -18,12 +18,12 @@
   "author": "Fabian Krutsch <f.krutsch@gmx.de> (https://krutsch.netlify.app/)",
   "license": "MIT",
   "devDependencies": {
-    "@types/cssnano": "^4.0.0",
-    "@types/glob": "^7.1.3",
+    "@types/cssnano": "^4.0.1",
+    "@types/glob": "^7.1.4",
     "@types/html-minifier-terser": "^6.0.0",
-    "@types/parse5": "^6.0.0",
+    "@types/parse5": "^6.0.1",
     "@types/postcss-load-config": "^3.0.1",
-    "typescript": "^4.3.2"
+    "typescript": "^4.4.3"
   },
   "repository": {
     "type": "git",
@@ -31,17 +31,17 @@
   },
   "bugs": "https://github.com/Krutsch/html-bundle/issues",
   "dependencies": {
-    "@web/parse5-utils": "^1.2.2",
-    "chokidar": "^3.5.1",
-    "critical": "^4.0.0",
-    "cssnano": "^5.0.5",
-    "esbuild": "^0.12.8",
-    "fastify": "^3.17.0",
-    "fastify-static": "^4.2.2",
+    "@web/parse5-utils": "^1.3.0",
+    "chokidar": "^3.5.2",
+    "critical": "^4.0.1",
+    "cssnano": "^5.0.8",
+    "esbuild": "^0.12.29",
+    "fastify": "^3.21.4",
+    "fastify-static": "^4.2.3",
     "glob": "^7.1.7",
-    "html-minifier-terser": "^6.0.0",
+    "html-minifier-terser": "^6.0.2",
     "parse5": "^6.0.1",
-    "postcss": "^8.3.1",
-    "postcss-load-config": "^3.0.1"
+    "postcss": "^8.3.7",
+    "postcss-load-config": "^3.1.0"
   }
 }
