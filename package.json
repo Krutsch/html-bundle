@@ -1,6 +1,6 @@
 {
   "name": "html-bundle",
-  "version": "5.5.1",
+  "version": "5.5.2",
   "description": "A very simple bundler for HTML SFC",
   "bin": "./dist/bundle.mjs",
   "scripts": {
