@@ -1,8 +1,8 @@
 {
   "name": "html-bundle",
-  "version": "5.5.0",
+  "version": "5.5.1",
   "description": "A very simple bundler for HTML SFC",
-  "bin": "./dist/bundle.js",
+  "bin": "./dist/bundle.mjs",
   "scripts": {
     "start": "tsc",
     "update": "npx npm-check-updates -u && npx typesync && npm i && npm outdated"
