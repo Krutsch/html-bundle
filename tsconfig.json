@@ -3,7 +3,7 @@
     "target": "ESNext",
     "module": "ESNext",
     "lib": ["ESNext"],
-    "outDir": "./esm",
+    "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
     "skipLibCheck": true,

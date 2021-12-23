@@ -49,7 +49,8 @@ if (isServeOnly) {
   // Performance Observer and file watcher
   const globHTML = new Event.EventEmitter();
   const taskEmitter = new Event.EventEmitter();
-  const start = performance.now();
+  let start = performance.now();
+  let addedHMR = false;
   let expectedTasks = 0; // This will be increased in globHandlers
   let finishedTasks = 0; // Current status
   taskEmitter.on("done", () => {
@@ -60,26 +61,13 @@ if (isServeOnly) {
         `🚀 Build finished in ${(performance.now() - start).toFixed(2)}ms ✨`
       );
 
-      if (isHMR) {
+      if (isHMR && !addedHMR) {
+        addedHMR = true;
         if (file) {
           const postCSSWatcher = watch(file);
-          postCSSWatcher.on("change", () => {
-            console.log("⚡ modified postcss.config – CSS will rebuild now.");
-            const newConfig = createPostCSSConfig();
-            plugins = newConfig.plugins;
-            options = newConfig.options;
-            CSSprocessor = postcss(plugins as AcceptedPlugin[]);
-
-            glob(`${SOURCE_FOLDER}/**/*.css`, {}, (err, files) => {
-              errorHandler(err);
-              expectedTasks += files.length;
-              for (const filename of files) {
-                const [buildFilename, buildPathDir] = getBuildNames(filename);
-                fs.mkdirSync(buildPathDir, { recursive: true });
-                minifyCSS(filename, buildFilename);
-              }
-            });
-          });
+          const tailwindCSSWatcher = watch(file.replace("postcss", "tailwind"));
+          postCSSWatcher.on("change", () => rebuildCSS("postcss"));
+          tailwindCSSWatcher.on("change", () => rebuildCSS("tailwind"));
         }
 
         console.log(`⌛ Waiting for file changes ...`);
@@ -89,6 +77,8 @@ if (isServeOnly) {
         let hasJSTS = false;
 
         watcher.on("add", (filename) => {
+          start = performance.now();
+          rebuildCSS();
           // Return if it was added by the build system itself
           if (/-bundle-\d+\.(j|t)sx?$/.test(filename)) {
             return;
@@ -112,6 +102,8 @@ if (isServeOnly) {
           });
         });
         watcher.on("change", (filename) => {
+          start = performance.now();
+          rebuildCSS();
           // Return if it was changed by the build system itself
           if (/-bundle-\d+\.(j|t)sx?$/.test(filename)) {
             return;
@@ -123,6 +115,7 @@ if (isServeOnly) {
           console.log(`⚡ modified ${buildFilename}`);
         });
         watcher.on("unlink", (filename) => {
+          start = performance.now();
           // Return if it was deleted by the build system itself
           if (/-bundle-\d+\.(j|t)sx?$/.test(filename)) {
             return;
@@ -142,6 +135,25 @@ if (isServeOnly) {
       }
     }
   });
+
+  function rebuildCSS(config?: string) {
+    start = performance.now();
+    if (config)
+      console.log(`⚡ modified ${config}.config – CSS will rebuild now.`);
+    const newConfig = createPostCSSConfig();
+    plugins = newConfig.plugins;
+    options = newConfig.options;
+    CSSprocessor = postcss(plugins as AcceptedPlugin[]);
+    glob(`${SOURCE_FOLDER}/**/*.css`, {}, (err, files) => {
+      errorHandler(err);
+      expectedTasks += files.length;
+      for (const filename of files) {
+        const [buildFilename, buildPathDir] = getBuildNames(filename);
+        fs.mkdirSync(buildPathDir, { recursive: true });
+        minifyCSS(filename, buildFilename);
+      }
+    });
+  }
 
   // Basic configuration
   const SOURCE_FOLDER = "src";
@@ -318,8 +330,8 @@ if (isServeOnly) {
           taskEmitter.emit("done");
           globHTML.emit("getReady");
 
-          if (serverSentEvents) {
-            const changedFile = tsMaybeX2JS(file!);
+          if (serverSentEvents && file) {
+            const changedFile = tsMaybeX2JS(file);
             const [buildFilename] = getBuildNames(changedFile);
             const js = fs.readFileSync(buildFilename, { encoding: "utf8" });
             serverSentEvents({
