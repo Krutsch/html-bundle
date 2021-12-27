@@ -24,7 +24,7 @@ import {
   bundleConfig,
   serverSentEvents,
   addHMRCode,
-} from "./utils.js";
+} from "./utils.mjs";
 
 const isHMR = process.argv.includes("--hmr") || bundleConfig.hmr;
 const isCritical = process.argv.includes("--critical") || bundleConfig.critical;

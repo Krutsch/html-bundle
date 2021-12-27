@@ -1,5 +1,5 @@
 import type { FastifyServerOptions } from "fastify";
-import { access, copyFile, mkdir, readFile } from "fs/promises";
+import { copyFile, mkdir, readFile } from "fs/promises";
 import path from "path";
 import Fastify from "fastify";
 import fastifyStatic from "fastify-static";
@@ -92,12 +92,10 @@ async function getBundleConfig() {
   };
 
   try {
-    const cfgPath = path.resolve(process.cwd(), "bundle.config.cjs");
-    await access(cfgPath, 0);
+    const cfgPath = path.resolve(process.cwd(), "bundle.config.js");
     const config = await import(`file://${cfgPath}`);
     return { ...base, ...config.default };
   } catch {
-    console.log("catch");
     return base;
   }
 }
@@ -114,7 +112,7 @@ export function addHMRCode(
 
   const script = createScript(
     { type: "module" },
-    getHMRCode(file, htmlIdMap.get(file), bundleConfig.src, bundleConfig.build)
+    getHMRCode(file, htmlIdMap.get(file), bundleConfig.src)
   );
 
   let DOM;
@@ -139,7 +137,7 @@ function randomText() {
   return Math.random().toString(32).slice(2);
 }
 
-function getHMRCode(file: string, id: string, src: string, build: string) {
+function getHMRCode(file: string, id: string, src: string) {
   return `import { render, html, $, $$, setInsertDiffing } from "hydro-js";
   if (!window.eventsource${id}) {
     setInsertDiffing(true);

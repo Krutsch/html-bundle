@@ -12,7 +12,7 @@ import { watch } from "chokidar";
 import { serialize, parse, parseFragment } from "parse5";
 import { getTagName, findElements } from "@web/parse5-utils";
 import awaitSpawn from "await-spawn";
-import { fileCopy, createDefaultServer, getPostCSSConfig, getBuildPath, createDir, bundleConfig, serverSentEvents, addHMRCode, } from "./utils.js";
+import { fileCopy, createDefaultServer, getPostCSSConfig, getBuildPath, createDir, bundleConfig, serverSentEvents, addHMRCode, } from "./utils.mjs";
 const isHMR = process.argv.includes("--hmr") || bundleConfig.hmr;
 const isCritical = process.argv.includes("--critical") || bundleConfig.critical;
 const isSecure = process.argv.includes("--secure") || bundleConfig.secure; // uses CSP for critical too
