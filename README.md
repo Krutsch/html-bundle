@@ -1,6 +1,16 @@
 # html-bundle
 
-> A very simple zero-config bundler primarily for HTML files. The idea is to use HTML as Single File Components, because HTML can already include `<style>` and `<script>` elements. Additionally, `TypeScript` and `JSX` can be used as inline or referenced script in HTML.
+A (primarily) zero-config bundler for HTML files. The idea is to use HTML as Single File Components, because HTML can already include `<style>` and `<script>` elements.
+
+## Features
+
+- 🦾 TypeScript (reference it as .js or write inline TS)
+- 📦 Automatic Package Installation
+- 💨 HMR
+- ⚡ [ESBuild](https://github.com/evanw/esbuild)
+- 🦔 [Critical CSS](https://github.com/evanw/esbuild)
+- 💅 PostCSS and Tailwind CSS Support
+- 🛡️ Almost no need to restart
 
 ![Demo](./example.gif)
 
@@ -20,19 +30,7 @@ Add an entry to script in package.json (see flags below).
 }
 ```
 
-or ideally
-
-```json
-{
-  "scripts": {
-    "dev": "html-bundle --hmr --secure",
-    "build": "html-bundle --critical",
-    "serve": "html-bundle --serveOnly --secure"
-  }
-}
-```
-
-Add a `postcss.config.cjs` file and run the build command.
+Add a `postcss.config.js` file and run the build command.
 <em>If you do not create this config file, a minimal in-memory config file will be created with `cssnano` as plugin.</em>
 
 ```properties
@@ -41,22 +39,33 @@ $ npm run build
 
 ## CLI
 
-`--serveOnly`: boots up a static server for the build folder (fastify)<br>
+`--hmr`: boots up a static server and enables Hot Module Replacement. **This generates a development build.**<br>
 `--secure`: creates a secure HTTP2 over HTTPS instance. This requires the files `localhost.pem` and `localhost-key.pem` in the root folder. You can generate them with [mkcert](https://github.com/FiloSottile/mkcert) for instance.<br>
-`--hmr`: boots up a static server and enables Hot Module Replacement. This works at its best with non-root HTML files without file references.<br>
-`--critical`: uses [critical](https://www.npmjs.com/package/critical) to extract and inline critical-path CSS to HTML.<br>
-`--csp`: disables inline option from `critical`.
+`--critical`: uses critical to extract and inline critical-path CSS to HTML.<br>
+`--handler`: path to your custom handler. Here, you can handle all non-supported files. You can get the filename via `process.argv[2]`.
+
+## Optional Config
+
+_The CLI flags can also be set by the config. Flags set by the CLI will override the config._
+Generate the config in the root and call it "bundle.config.js"
+
+**src:** input path. Default to "src"<br>
+**build:** output path. Defaults to "build"<br>
+**port:** For the HMR Server. Defaults to 5000<br>
+**esbuild:** Your additional config<br>
+**html-minifier-terser:** Your additional config<br>
+**critical:** Your additional config<br>
 
 ## Concept
 
-The bundler always globs all HTML, CSS and TS/JS files from the `src/` directory and processes them to the `build/` directory. PostCSS is being used for CSS files and inline styles, html-minifier for HTML and esbuild to bundle, minify, etc. for inline and referenced TS/JS. There are no <strong>regexes</strong>, just <strong>AST</strong> transformations. Server-sent events and [hydro-js](https://github.com/Krutsch/hydro-js) are used for HMR.
+The bundler always globs all HTML, CSS and TS/JS files from the `src` (config) directory and processes them to the `build` (config) directory. PostCSS is being used for CSS files and inline styles, html-minifier-terser for HTML and esbuild to bundle, minify, etc. for inline and referenced TS/JS. Server-sent events and [hydro-js](https://github.com/Krutsch/hydro-js) are used for HMR. This will install hydro-js to your dependencies. In order to trigger SPA Routers, the popstate event is being triggered after HMR Operations.
 
 ## Example hydro-js
 
-Have a look at [hydro-starter](https://github.com/Krutsch/hydro-starter).<br>
+Get the idea from [hydro-starter](https://github.com/Krutsch/hydro-starter).<br>
 Set `"jsxFactory": "h"` in `tsconfig.json` for JSX.
 
-#### Input
+### Input
 
 ```html
 <!DOCTYPE html>
