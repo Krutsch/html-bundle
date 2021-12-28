@@ -48,7 +48,7 @@ if (bundleConfig.deletePrev) {
   await rm(bundleConfig.build, { force: true, recursive: true });
 }
 
-glob(`${bundleConfig.src}/**/*.*`, build);
+glob(`${bundleConfig.src}/**/*`, build);
 
 async function build(err: any, files: string[], firstRun = true) {
   if (err) {
@@ -127,12 +127,11 @@ async function build(err: any, files: string[], firstRun = true) {
     }
 
     const watcher = watch(bundleConfig.src);
-    let addCount = 0; // The add watcher will add all the files initially - do not rebuild them
     watcher.on("add", async (file) => {
-      if (addCount++ <= files.length || INLINE_BUNDLE_FILE.test(file)) {
+      file = String.raw`${file}`.replace(/\\/g, "/"); // glob and chokidar diff
+      if (files.includes(file) || INLINE_BUNDLE_FILE.test(file)) {
         return;
       }
-      file = String.raw`${file}`.replace(/\\/g, "/"); // glob and chokidar diff
 
       await rebuild(file);
 
