@@ -18,7 +18,7 @@ A (primarily) zero-config bundler for HTML files. The idea is to use HTML as Sin
 
 ## Demo
 
-<video autoplay loop src='example.mp4' style="width:100%" />
+![Demo](./example.gif)
 
 ## Installation and Usage
 
