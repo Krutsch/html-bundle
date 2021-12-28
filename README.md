@@ -16,6 +16,10 @@ A (primarily) zero-config bundler for HTML files. The idea is to use HTML as Sin
 - 🚋 Watcher on PostCSS and Tailwind CSS and TS Config
 - 🛡️ Almost no need to restart
 
+## Demo
+
+<video autoplay loop src='example.mp4' style="width:100%" />
+
 ## Installation and Usage
 
 ```properties
@@ -173,7 +177,3 @@ Set `"jsxFactory": "h"` in `tsconfig.json`.
   </body>
 </html>
 ```
-
-### Demo
-
-![Demo](./example.gif)
