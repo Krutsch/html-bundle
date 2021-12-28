@@ -145,6 +145,7 @@ function randomText() {
 function getHMRCode(file: string, id: string, src: string) {
   return `import { render, html, $, $$, setShouldSetReactivity } from "hydro-js";
   window.isHMR = true;
+  window.lastCalled = new Map();
   if (!window.eventsource${id}) {
     window.eventsource${id} = new EventSource("/hmr");
     window.eventsource${id}.addEventListener('error', (e) => {
@@ -192,15 +193,35 @@ function getHMRCode(file: string, id: string, src: string) {
             }
           }
         }
+
+        $$('link[rel="stylesheet"][href]').forEach(link => {
+          link.setAttribute("href", link.getAttribute("href") + "?v=" + String(Math.random().toFixed(4)).slice(2));
+        })
+        if (dataObj.html.includes("<script")) updateElem("script");
+        
         
         if (dataObj.file === \`${src}/index.html\`) {
           dispatchEvent(new Event("popstate"));
         }
       } else if (dataObj.file.endsWith(".css")) {
-        updateElem("link");
+        const now = performance.now();
+        if (!window.lastCalled.has(dataObj.file) || now - window.lastCalled.get(dataObj.file) > 100) {
+          $$('link[rel="stylesheet"][href]').forEach(link => {
+            link.setAttribute("href", link.getAttribute("href") + "?v=" + String(Math.random().toFixed(4)).slice(2));
+          })
+          window.lastCalled.set(dataObj.file, now)
+        }
       } else if (dataObj.file.endsWith(".js")) {
-        updateElem("script")
+        const now = performance.now();
+        if (!window.lastCalled.has(dataObj.file) || now - window.lastCalled.get(dataObj.file) > 100) {
+          $$('link[rel="stylesheet"][href]').forEach(link => {
+            link.setAttribute("href", link.getAttribute("href") + "?v=" + String(Math.random().toFixed(4)).slice(2));
+          })
+          updateElem("script");
+          window.lastCalled.set(dataObj.file, now)
+        }
       }
+      
 
       function updateElem(type) {
         const hmrId = "${id}";
