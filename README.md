@@ -104,10 +104,6 @@ Set `"jsxFactory": "h"` in `tsconfig.json` for JSX.
 </html>
 ```
 
-### Output
-
-![Output](output.JPG)
-
 ## Example Vue.js@next
 
 Set `"jsxFactory": "h"` in `tsconfig.json`.
