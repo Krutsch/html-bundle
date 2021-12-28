@@ -58,24 +58,28 @@ export async function createDefaultServer(isSecure: boolean) {
   fastify.register(fastifyStatic, {
     root: path.join(process.cwd(), bundleConfig.build),
   });
-  fastify.get("/events", (_req, reply) => {
+  fastify.get("/hmr", (_req, reply) => {
     reply.raw.setHeader("Content-Type", "text/event-stream");
     reply.raw.setHeader("Cache-Control", "no-cache");
     !isSecure && reply.raw.setHeader("Connection", "keep-alive");
 
     CONNECTIONS.push(reply.raw);
 
-    serverSentEvents = (data) =>
+    serverSentEvents = (data) => {
+      if (/\.(jsx?|tsx?)$/.test(data.file)) {
+        data.file = data.file.replace(".ts", ".js").replace(".jsx", ".js");
+      }
       CONNECTIONS.forEach((rep) => {
         rep.write(`data: ${JSON.stringify(data)}\n\n`);
       });
+    };
   });
   return fastify;
 }
 
-export function getPostCSSConfig() {
+export async function getPostCSSConfig() {
   try {
-    return postcssrc({});
+    return await postcssrc({});
   } catch {
     return { plugins: [cssnano], options: {}, file: "" };
   }
@@ -89,6 +93,7 @@ async function getBundleConfig() {
     esbuild: {},
     "html-minifier-terser": {},
     critical: {},
+    deletePrev: true,
   };
 
   try {
@@ -138,21 +143,34 @@ function randomText() {
 }
 
 function getHMRCode(file: string, id: string, src: string) {
-  return `import { render, html, $, $$, setInsertDiffing } from "hydro-js";
+  return `import { render, html, $, $$, setShouldSetReactivity } from "hydro-js";
+  window.isHMR = true;
   if (!window.eventsource${id}) {
-    setInsertDiffing(true);
-    window.eventsource${id} = new EventSource("/events");
+    window.eventsource${id} = new EventSource("/hmr");
+    window.eventsource${id}.addEventListener('error', (e) => {
+      setTimeout(() => {
+        window.eventsource${id} = new EventSource("/hmr");
+      }, 1000);
+    });
     window.eventsource${id}.addEventListener("message", ({ data }) => {
       const dataObj = JSON.parse(data);
       const file = "${file}";
 
       if (file === dataObj.file && "html" in dataObj) {
+        let newHTML;
+        try {
+          newHTML = html\`\${dataObj.html}\`
+        } catch {
+          setShouldSetReactivity(false);
+          newHTML = html\`\${dataObj.html}\`
+          setShouldSetReactivity(true);
+        }
+        
         if (dataObj.html.startsWith('<!DOCTYPE html>') || dataObj.html.startsWith('<html')) {
           document.head.remove(); // Don't try to diff the head – just re-run the scripts
-          render(html\`\${dataObj.html}\`, document.documentElement);
+          render(newHTML, document.documentElement, false);
         } else {
           const hmrID = "${id}";
-          const newHTML = html\`\${dataObj.html}\`;
           const hmrElems = Array.from(newHTML.childNodes);
           const hmrWheres = Array.from($$(\`[data-hmr="\${hmrID}"]\`))
           // render new elements for old elements. Then, remove rest old elements and add add new elements after the last old one
@@ -175,10 +193,12 @@ function getHMRCode(file: string, id: string, src: string) {
           }
         }
         
-        setTimeout(() => dispatchEvent(new Event("popstate")));
-      } else if (dataObj.file.endsWith("css")) {
+        if (dataObj.file === \`${src}/index.html\`) {
+          dispatchEvent(new Event("popstate"));
+        }
+      } else if (dataObj.file.endsWith(".css")) {
         updateElem("link");
-      } else if (dataObj.file.endsWith("js")) {
+      } else if (dataObj.file.endsWith(".js")) {
         updateElem("script")
       }
 
@@ -189,13 +209,21 @@ function getHMRCode(file: string, id: string, src: string) {
         const elem = $(\`[data-hmr="\${hmrId}"] \${type}[\${attr}^="\${noSrcFile}"]\`); // could be $(\`\${type}[data-hmr="\${hmrId}"][\${attr}^="\${noSrcFile}"]\`) ?
         
         if (elem) {
-          const clone = document.createElement(type);
-          for (const key of elem.getAttributeNames()) {
-            clone.setAttribute(key, elem.getAttribute(key));
+          updateOne(type, attr, elem)
+        } else {
+          for(const e of $$(\`[data-hmr="\${hmrId}"] \${type}\`)) {
+            updateOne(type, attr, e);
           }
-          clone.setAttribute(attr, elem.getAttribute(attr) + "?v=" + String(Math.random().toFixed(4)).slice(2));
-          render(clone, elem, false);
         }
+      }
+
+      function updateOne(type, attr, elem) {
+        const clone = document.createElement(type);
+        for (const key of elem.getAttributeNames()) {
+          clone.setAttribute(key, elem.getAttribute(key));
+        }
+        clone.setAttribute(attr, elem.getAttribute(attr) + "?v=" + String(Math.random().toFixed(4)).slice(2));
+        render(clone, elem, false);
       }
     });
   }

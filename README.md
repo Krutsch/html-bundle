@@ -1,18 +1,20 @@
 # html-bundle
 
+<p align="center">
+  <img src="./logo.jpg" style="width:500px;" />
+</p>
+
 A (primarily) zero-config bundler for HTML files. The idea is to use HTML as Single File Components, because HTML can already include `<style>` and `<script>` elements.
 
 ## Features
 
 - 🦾 TypeScript (reference it as .js or write inline TS)
 - 📦 Automatic Package Installation
-- 💨 HMR
+- 💨 HMR and automatic reconnect
 - ⚡ [ESBuild](https://github.com/evanw/esbuild)
 - 🦔 [Critical CSS](https://github.com/evanw/esbuild)
-- 💅 PostCSS and Tailwind CSS Support
+- 🚋 Watcher on PostCSS and Tailwind CSS and TS Config
 - 🛡️ Almost no need to restart
-
-![Demo](./example.gif)
 
 ## Installation and Usage
 
@@ -39,7 +41,7 @@ $ npm run build
 
 ## CLI
 
-`--hmr`: boots up a static server and enables Hot Module Replacement. **This generates a development build.**<br>
+`--hmr`: boots up a static server and enables Hot Module Replacement. **This generates a development build and works best when not triggered from the main index.html**<br>
 `--secure`: creates a secure HTTP2 over HTTPS instance. This requires the files `localhost.pem` and `localhost-key.pem` in the root folder. You can generate them with [mkcert](https://github.com/FiloSottile/mkcert) for instance.<br>
 `--critical`: uses critical to extract and inline critical-path CSS to HTML.<br>
 `--handler`: path to your custom handler. Here, you can handle all non-supported files. You can get the filename via `process.argv[2]`.
@@ -52,6 +54,7 @@ Generate the config in the root and call it "bundle.config.js"
 **src:** input path. Default to "src"<br>
 **build:** output path. Defaults to "build"<br>
 **port:** For the HMR Server. Defaults to 5000<br>
+**deletePrev:** Whether to delelte the build folder. Defaults to true<br>
 **esbuild:** Your additional config<br>
 **html-minifier-terser:** Your additional config<br>
 **critical:** Your additional config<br>
@@ -76,13 +79,14 @@ Set `"jsxFactory": "h"` in `tsconfig.json` for JSX.
     <title>Example</title>
     <meta name="Description" content="Example for html-bundle" />
     <script type="module">
-      import { render, h } from "hydro-js";
+      import { render, h, reactive } from "hydro-js";
 
-      function Example() {
-        return <main id="app">Testing html-bundle</main>;
+      function Example({ name }) {
+        return <main id="app">Hi {name}</main>;
       }
 
-      render(<Example />, "#app");
+      const name = reactive("Tester");
+      render(<Example name={name} />, "#app");
     </script>
     <style>
       body {
@@ -100,7 +104,7 @@ Set `"jsxFactory": "h"` in `tsconfig.json` for JSX.
 
 ![Output](output.JPG)
 
-## Example Vue.js
+## Example Vue.js@next
 
 Set `"jsxFactory": "h"` in `tsconfig.json`.
 
@@ -136,7 +140,7 @@ Set `"jsxFactory": "h"` in `tsconfig.json`.
 
 ## Example React
 
-Set `"jsxFactory": "React.createElement"` in `tsconfig.json`.
+Set `"jsxFactory": "h"` in `tsconfig.json`.
 
 ```html
 <!DOCTYPE html>
@@ -149,6 +153,7 @@ Set `"jsxFactory": "React.createElement"` in `tsconfig.json`.
   <script type="module">
     import React, { useState } from "react";
     import { render } from "react-dom";
+    const h = React.createElement;
 
     function Example() {
       const [count, setCount] = useState(0);
@@ -161,10 +166,14 @@ Set `"jsxFactory": "React.createElement"` in `tsconfig.json`.
       );
     }
 
-    render(<Example />, document.getElementById("root"));
+    render(<Example />, document.getElementById("app"));
   </script>
   <body>
-    <div id="root"></div>
+    <div id="app"></div>
   </body>
 </html>
 ```
+
+### Demo
+
+![Demo](./example.gif)

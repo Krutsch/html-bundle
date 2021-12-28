@@ -20,23 +20,25 @@ const handlerFile = process.argv.includes("--handler")
     ? process.argv[process.argv.indexOf("--handler") + 1]
     : bundleConfig.handler;
 process.env.NODE_ENV = isHMR ? "development" : "production"; // just in case other tools are using it
-const timer = performance.now();
+let timer = performance.now();
 let { plugins, options, file: postcssFile } = await getPostCSSConfig();
 let CSSprocessor = postcss(plugins);
 let fastify;
 const inlineFiles = new Set();
 const TEMPLATE_LITERAL_MINIFIER = /\n\s+/g;
 const INLINE_BUNDLE_FILE = /-bundle-\d+.tsx$/;
-const SUPPORTED_FILES = /\.(html|css|m?jsx?|m?tsx?)$/;
+const SUPPORTED_FILES = /\.(html|css|jsx?|tsx?)$/;
 const execFilePromise = promisify(execFile);
-await rm(bundleConfig.build, { force: true, recursive: true });
+if (bundleConfig.deletePrev) {
+    await rm(bundleConfig.build, { force: true, recursive: true });
+}
 glob(`${bundleConfig.src}/**/*.*`, build);
-async function build(err, files) {
+async function build(err, files, firstRun = true) {
     if (err) {
         console.error(err);
         process.exit(1);
     }
-    if (isHMR) {
+    if (isHMR && firstRun) {
         fastify = await createDefaultServer(isSecure);
         fastify.listen(bundleConfig.port);
         console.log(`💻 Sever listening on port ${bundleConfig.port}.`);
@@ -46,7 +48,8 @@ async function build(err, files) {
         if (!SUPPORTED_FILES.test(file)) {
             if (handlerFile) {
                 const { stdout } = await execFilePromise("node", [handlerFile, file]);
-                console.log("📋 Logging Handler: ", String(stdout));
+                if (String(stdout))
+                    console.log("📋 Logging Handler: ", String(stdout));
             }
             else {
                 await fileCopy(file);
@@ -77,14 +80,19 @@ async function build(err, files) {
         }
     }
     console.log(`🚀 Build finished in ${(performance.now() - timer).toFixed(2)}ms ✨`);
-    if (isHMR) {
+    if (isHMR && firstRun) {
         console.log(`⌛ Waiting for file changes ...`);
         if (postcssFile) {
             const postCSSWatcher = watch(postcssFile);
             const tailwindCSSWatcher = watch(postcssFile.replace("postcss", "tailwind")); // Assuming that the file ext is the same
+            const tsConfigWatcher = watch(postcssFile.split("\\").slice(0, -1).join("\\") + "\\tsconfig.json");
             const cssFiles = files.filter((file) => file.endsWith(".css"));
             postCSSWatcher.on("change", async () => await rebuildCSS(cssFiles, "postcss"));
             tailwindCSSWatcher.on("change", async () => await rebuildCSS(cssFiles, "tailwind"));
+            tsConfigWatcher.on("change", async () => {
+                timer = performance.now();
+                await build(null, files, false);
+            });
         }
         const watcher = watch(bundleConfig.src);
         let addCount = 0; // The add watcher will add all the files initially - do not rebuild them
@@ -126,7 +134,7 @@ async function build(err, files) {
             let html;
             if (file.endsWith(".html")) {
                 // To refill the inlineFiles needed to build JS
-                for (const htmlFile of files.filter((file) => file.endsWith("html"))) {
+                for (const htmlFile of files.filter((file) => file.endsWith(".html"))) {
                     await writeInlineScripts(htmlFile);
                 }
                 await minifyCode();
@@ -138,14 +146,16 @@ async function build(err, files) {
                 }
                 html = await minifyHTML(file, getBuildPath(file));
             }
-            else if (/(m?jsx?|m?tsx?)$/.test(file)) {
+            else if (/\.(jsx?|tsx?)$/.test(file)) {
+                inlineFiles.add(file);
                 await minifyCode();
             }
             else {
                 const { stdout } = await execFilePromise("node", [handlerFile, file]);
-                console.log("📋 Logging Handler: ", String(stdout));
+                if (String(stdout))
+                    console.log("📋 Logging Handler: ", String(stdout));
             }
-            serverSentEvents({ file, html });
+            serverSentEvents?.({ file, html });
         }
     }
 }
@@ -173,7 +183,7 @@ async function minifyCode() {
             sourcemap: isHMR,
             splitting: true,
             define: {
-                "process.env.NODE_ENV": process.env.NODE_ENV,
+                "process.env.NODE_ENV": `"${process.env.NODE_ENV}"`,
             },
             loader: { ".js": "jsx", ".ts": "tsx" },
             bundle: true,
@@ -283,11 +293,16 @@ async function minifyHTML(file, buildFile) {
     }
     fileText = serialize(DOM);
     // Minify HTML
-    fileText = await minify(fileText, {
-        collapseWhitespace: true,
-        removeComments: true,
-        ...bundleConfig["html-minifier-terser"],
-    });
+    try {
+        fileText = await minify(fileText, {
+            collapseWhitespace: true,
+            removeComments: true,
+            ...bundleConfig["html-minifier-terser"],
+        });
+    }
+    catch (e) {
+        console.error(e);
+    }
     if (!isCritical) {
         await writeFile(buildFile, fileText);
         return fileText;
