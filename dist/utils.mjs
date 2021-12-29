@@ -164,8 +164,6 @@ function getHMRCode(file, id, src) {
         if (dataObj.html.includes("<script")) updateElem("script");
         
         
-        console.log("dispatch")
-        console.log(dataObj.file)
         if (dataObj.file === \`${src}/index.html\`) {
           dispatchEvent(new Event("popstate"));
         }

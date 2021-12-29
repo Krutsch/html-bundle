@@ -243,12 +243,13 @@ async function minifyCode(): Promise<unknown> {
           missingPkg = true;
           const packageNameRegex = /(?<=").*(?=")/;
           const [pkgName] = error.text.match(packageNameRegex);
-          console.log(`📦 Package ${pkgName} was installed for you`);
 
           await awaitSpawn(process.platform === "win32" ? "npm.cmd" : "npm", [
             "install",
             pkgName,
           ]);
+
+          console.log(`📦 Package ${pkgName} was installed for you`);
         }
       }
 
