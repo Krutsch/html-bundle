@@ -27,7 +27,8 @@ import {
 } from "./utils.mjs";
 
 const isHMR = process.argv.includes("--hmr") || bundleConfig.hmr;
-const isCritical = process.argv.includes("--critical") || bundleConfig.critical;
+const isCritical =
+  process.argv.includes("--isCritical") || bundleConfig.isCritical;
 const isSecure = process.argv.includes("--secure") || bundleConfig.secure; // uses CSP for critical too
 const handlerFile = process.argv.includes("--handler")
   ? process.argv[process.argv.indexOf("--handler") + 1]

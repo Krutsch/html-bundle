@@ -47,7 +47,7 @@ $ npm run build
 
 `--hmr`: boots up a static server and enables Hot Module Replacement. **This generates a development build and works best when not triggered from the main index.html**<br>
 `--secure`: creates a secure HTTP2 over HTTPS instance. This requires the files `localhost.pem` and `localhost-key.pem` in the root folder. You can generate them with [mkcert](https://github.com/FiloSottile/mkcert) for instance.<br>
-`--critical`: uses critical to extract and inline critical-path CSS to HTML.<br>
+`--isCritical`: uses critical to extract and inline critical-path CSS to HTML.<br>
 `--handler`: path to your custom handler. Here, you can handle all non-supported files. You can get the filename via `process.argv[2]`.
 
 ## Optional Config
