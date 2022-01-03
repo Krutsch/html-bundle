@@ -18,7 +18,7 @@
   "author": "Fabian Krutsch <f.krutsch@gmx.de> (https://krutsch.netlify.app/)",
   "license": "MIT",
   "devDependencies": {
-    "@types/cssnano": "^4.0.1",
+    "@types/cssnano": "^5.0.0",
     "@types/glob": "^7.2.0",
     "@types/html-minifier-terser": "^6.1.0",
     "@types/parse5": "^6.0.3",
