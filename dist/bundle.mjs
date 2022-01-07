@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { performance } from "perf_hooks";
-import { readFile, rm, writeFile, readdir } from "fs/promises";
+import { readFile, rm, writeFile, readdir, lstat } from "fs/promises";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import glob from "glob";
@@ -52,6 +52,8 @@ async function build(err, files, firstRun = true) {
                     console.log("📋 Logging Handler: ", String(stdout));
             }
             else {
+                if ((await lstat(file)).isDirectory())
+                    continue;
                 await fileCopy(file);
             }
         }

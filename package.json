@@ -1,6 +1,6 @@
 {
   "name": "html-bundle",
-  "version": "6.0.5",
+  "version": "6.0.6",
   "description": "A very simple bundler for HTML SFC",
   "bin": "./dist/bundle.mjs",
   "scripts": {
@@ -36,14 +36,14 @@
     "chokidar": "^3.5.2",
     "critical": "^4.0.1",
     "cssnano": "^5.0.14",
-    "esbuild": "^0.14.9",
+    "esbuild": "^0.14.10",
     "fastify": "^3.25.3",
     "fastify-static": "^4.5.0",
     "glob": "^7.2.0",
     "html-minifier-terser": "^6.1.0",
-    "hydro-js": "^1.5.3",
+    "hydro-js": "^1.5.7",
     "parse5": "^6.0.1",
     "postcss": "^8.4.5",
-    "postcss-load-config": "^3.1.0"
+    "postcss-load-config": "^3.1.1"
   }
 }

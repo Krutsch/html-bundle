@@ -3,7 +3,7 @@
 import type { TextNode } from "parse5";
 import type { AcceptedPlugin } from "postcss";
 import { performance } from "perf_hooks";
-import { readFile, rm, writeFile, readdir } from "fs/promises";
+import { readFile, rm, writeFile, readdir, lstat } from "fs/promises";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import glob from "glob";
@@ -71,6 +71,7 @@ async function build(err: any, files: string[], firstRun = true) {
         const { stdout } = await execFilePromise("node", [handlerFile, file]);
         if (String(stdout)) console.log("📋 Logging Handler: ", String(stdout));
       } else {
+        if ((await lstat(file)).isDirectory()) continue;
         await fileCopy(file);
       }
     } else {
