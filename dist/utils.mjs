@@ -207,7 +207,8 @@ function getHMRCode(file, id, src) {
         for (const key of elem.getAttributeNames()) {
           clone.setAttribute(key, elem.getAttribute(key));
         }
-        clone.setAttribute(attr, elem.getAttribute(attr) + "?v=" + String(Math.random().toFixed(4)).slice(2));
+        const attrVal = elem.getAttribute(attr);
+        if (attrVal) clone.setAttribute(attr, attrVal + "?v=" + String(Math.random().toFixed(4)).slice(2));
         render(clone, elem, false);
       }
     });
