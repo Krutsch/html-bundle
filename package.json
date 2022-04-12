@@ -39,7 +39,7 @@
     "esbuild": "^0.14.14",
     "fastify": "^3.27.0",
     "fastify-static": "^4.5.0",
-    "glob": "^7.2.0",
+    "glob": "^8.0.1",
     "html-minifier-terser": "^6.1.0",
     "hydro-js": "^1.5.10",
     "parse5": "^6.0.1",
