@@ -104,7 +104,7 @@ Set `"jsxFactory": "h"` in `tsconfig.json` for JSX.
 </html>
 ```
 
-## Example Vue.js@next
+## Example Vue.js
 
 Set `"jsxFactory": "h"` in `tsconfig.json`.
 
@@ -140,7 +140,7 @@ Set `"jsxFactory": "h"` in `tsconfig.json`.
 
 ## Example React
 
-Set `"jsxFactory": "h"` in `tsconfig.json`.
+Set `"jsxFactory": "React.createElement"` in `tsconfig.json`.
 
 ```html
 <!DOCTYPE html>
@@ -152,8 +152,7 @@ Set `"jsxFactory": "h"` in `tsconfig.json`.
   </head>
   <script type="module">
     import React, { useState } from "react";
-    import { render } from "react-dom";
-    const h = React.createElement;
+    import { createRoot } from "react-dom/client";
 
     function Example() {
       const [count, setCount] = useState(0);
@@ -166,7 +165,7 @@ Set `"jsxFactory": "h"` in `tsconfig.json`.
       );
     }
 
-    render(<Example />, document.getElementById("app"));
+    createRoot(document.getElementById("app")).render(<Example />);
   </script>
   <body>
     <div id="app"></div>
