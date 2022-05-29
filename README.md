@@ -12,7 +12,7 @@ A (primarily) zero-config bundler for HTML files. The idea is to use HTML as Sin
 - 📦 Automatic Package Installation
 - 💨 HMR and automatic reconnect
 - ⚡ [ESBuild](https://github.com/evanw/esbuild)
-- 🦔 [Critical CSS](https://github.com/evanw/esbuild)
+- 🦔 [Critical CSS](https://www.npmjs.com/package/critters)
 - 🚋 Watcher on PostCSS and Tailwind CSS and TS Config
 - 🛡️ Almost no need to restart
 

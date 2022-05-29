@@ -6,7 +6,7 @@ import { promisify } from "util";
 import glob from "glob";
 import postcss from "postcss";
 import esbuild from "esbuild";
-import critical from "critical";
+import Critters from "critters";
 import { minify } from "html-minifier-terser";
 import { watch } from "chokidar";
 import { serialize, parse, parseFragment } from "parse5";
@@ -15,6 +15,10 @@ import awaitSpawn from "await-spawn";
 import { fileCopy, createDefaultServer, getPostCSSConfig, getBuildPath, createDir, bundleConfig, serverSentEvents, addHMRCode, } from "./utils.mjs";
 const isHMR = process.argv.includes("--hmr") || bundleConfig.hmr;
 const isCritical = process.argv.includes("--isCritical") || bundleConfig.isCritical;
+const critters = new Critters({
+    path: bundleConfig.build,
+    logLevel: "silent",
+});
 const isSecure = process.argv.includes("--secure") || bundleConfig.secure; // uses CSP for critical too
 const handlerFile = process.argv.includes("--handler")
     ? process.argv[process.argv.indexOf("--handler") + 1]
@@ -309,31 +313,16 @@ async function minifyHTML(file, buildFile) {
     catch (e) {
         console.error(e);
     }
-    if (!isCritical) {
-        await writeFile(buildFile, fileText);
-        return fileText;
-    }
-    else {
-        const buildFileArr = buildFile.split("/");
-        const fileWithBase = buildFileArr.pop();
-        const buildDir = buildFileArr.join("/");
-        // critical is generating the files on the fs
+    if (isCritical) {
         try {
-            const { html } = await critical.generate({
-                base: buildDir,
-                html: fileText,
-                target: fileWithBase,
-                inline: !isSecure,
-                extract: true,
-                rebase: () => { },
-                ...bundleConfig.critical,
-            });
-            return html;
+            fileText = await critters.process(fileText);
         }
         catch (err) {
             console.error(err);
         }
     }
+    await writeFile(buildFile, fileText);
+    return fileText;
 }
 async function rebuildCSS(files, config) {
     const newConfig = await getPostCSSConfig();
