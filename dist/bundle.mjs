@@ -315,7 +315,12 @@ async function minifyHTML(file, buildFile) {
     }
     if (isCritical) {
         try {
+            const isPartical = !fileText.startsWith("<!DOCTYPE html>");
             fileText = await critters.process(fileText);
+            // fix critters jsdom
+            if (isPartical) {
+                fileText = fileText.replace(/<\/?(html|head|body)>/g, "");
+            }
         }
         catch (err) {
             console.error(err);
