@@ -1,8 +1,9 @@
+import type { ParentNode } from "@web/parse5-utils";
 import type { FastifyServerOptions } from "fastify";
 import { copyFile, mkdir, readFile } from "fs/promises";
 import path from "path";
 import Fastify from "fastify";
-import fastifyStatic from "fastify-static";
+import fastifyStatic from "@fastify/static";
 import postcssrc from "postcss-load-config";
 import cssnano from "cssnano";
 import { parse, parseFragment, serialize } from "parse5";
@@ -135,7 +136,7 @@ export function addHMRCode(
     node.attrs?.push({ name: "data-hmr", value: htmlIdMap.get(file) })
   );
 
-  return serialize(DOM);
+  return serialize(DOM as ParentNode);
 }
 
 function randomText() {

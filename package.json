@@ -1,6 +1,6 @@
 {
   "name": "html-bundle",
-  "version": "6.0.8",
+  "version": "6.0.9",
   "description": "A very simple bundler for HTML SFC",
   "bin": "./dist/bundle.mjs",
   "scripts": {
@@ -18,12 +18,13 @@
   "author": "Fabian Krutsch <f.krutsch@gmx.de> (https://krutsch.netlify.app/)",
   "license": "MIT",
   "devDependencies": {
+    "@fastify/static": "^5.0.2",
     "@types/cssnano": "^5.0.0",
     "@types/glob": "^7.2.0",
     "@types/html-minifier-terser": "^6.1.0",
     "@types/parse5": "^6.0.3",
     "@types/postcss-load-config": "^3.0.1",
-    "typescript": "^4.6.3"
+    "typescript": "^4.7.2"
   },
   "repository": {
     "type": "git",
@@ -35,15 +36,14 @@
     "await-spawn": "^4.0.2",
     "chokidar": "^3.5.3",
     "critical": "^4.0.1",
-    "cssnano": "^5.1.7",
-    "esbuild": "^0.14.36",
-    "fastify": "^3.28.0",
-    "fastify-static": "^4.6.1",
-    "glob": "^8.0.1",
+    "cssnano": "^5.1.9",
+    "esbuild": "^0.14.42",
+    "fastify": "^3.29.0",
+    "glob": "^8.0.3",
     "html-minifier-terser": "^6.1.0",
-    "hydro-js": "^1.5.10",
+    "hydro-js": "^1.5.13",
     "parse5": "^7.0.0",
-    "postcss": "^8.4.12",
+    "postcss": "^8.4.14",
     "postcss-load-config": "^4.0.0"
   }
 }

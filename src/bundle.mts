@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import type { TextNode } from "parse5";
+import type { TextNode } from "@web/parse5-utils";
 import type { AcceptedPlugin } from "postcss";
 import { performance } from "perf_hooks";
 import { readFile, rm, writeFile, readdir, lstat } from "fs/promises";
@@ -189,9 +189,14 @@ async function build(err: any, files: string[], firstRun = true) {
       } else if (/\.(jsx?|tsx?)$/.test(file)) {
         inlineFiles.add(file);
         await minifyCode();
-      } else {
-        const { stdout } = await execFilePromise("node", [handlerFile, file]);
-        if (String(stdout)) console.log("📋 Logging Handler: ", String(stdout));
+      } else if (!file.endsWith(".css")) {
+        if (handlerFile) {
+          const { stdout } = await execFilePromise("node", [handlerFile, file]);
+          if (String(stdout))
+            console.log("📋 Logging Handler: ", String(stdout));
+        } else {
+          await fileCopy(file);
+        }
       }
 
       serverSentEvents?.({ file, html });
@@ -283,7 +288,9 @@ async function writeInlineScripts(file: string) {
   for (let index = 0; index < scripts.length; index++) {
     const script = scripts[index];
     const scriptTextNode = script.childNodes[0] as TextNode;
-    const isReferencedScript = script.attrs.find((a) => a.name === "src");
+    const isReferencedScript = script.attrs.find(
+      (a: { name: string }) => a.name === "src"
+    );
     const scriptContent = scriptTextNode?.value;
     if (!scriptContent || isReferencedScript) continue;
 
@@ -315,7 +322,9 @@ async function minifyHTML(file: string, buildFile: string) {
   for (let index = 0; index < scripts.length; index++) {
     const script = scripts[index];
     const scriptTextNode = script.childNodes[0] as TextNode;
-    const isReferencedScript = script.attrs.find((a) => a.name === "src");
+    const isReferencedScript = script.attrs.find(
+      (a: { name: string }) => a.name === "src"
+    );
     if (!scriptTextNode?.value || isReferencedScript) continue;
 
     // Use bundled file

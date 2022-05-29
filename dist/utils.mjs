@@ -1,7 +1,7 @@
 import { copyFile, mkdir, readFile } from "fs/promises";
 import path from "path";
 import Fastify from "fastify";
-import fastifyStatic from "fastify-static";
+import fastifyStatic from "@fastify/static";
 import postcssrc from "postcss-load-config";
 import cssnano from "cssnano";
 import { parse, parseFragment, serialize } from "parse5";

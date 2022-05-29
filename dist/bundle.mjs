@@ -151,10 +151,15 @@ async function build(err, files, firstRun = true) {
                 inlineFiles.add(file);
                 await minifyCode();
             }
-            else {
-                const { stdout } = await execFilePromise("node", [handlerFile, file]);
-                if (String(stdout))
-                    console.log("📋 Logging Handler: ", String(stdout));
+            else if (!file.endsWith(".css")) {
+                if (handlerFile) {
+                    const { stdout } = await execFilePromise("node", [handlerFile, file]);
+                    if (String(stdout))
+                        console.log("📋 Logging Handler: ", String(stdout));
+                }
+                else {
+                    await fileCopy(file);
+                }
             }
             serverSentEvents?.({ file, html });
         }
