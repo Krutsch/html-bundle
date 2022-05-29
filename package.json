@@ -1,6 +1,6 @@
 {
   "name": "html-bundle",
-  "version": "6.0.9",
+  "version": "6.0.10",
   "description": "A very simple bundler for HTML SFC",
   "bin": "./dist/bundle.mjs",
   "scripts": {
@@ -18,7 +18,6 @@
   "author": "Fabian Krutsch <f.krutsch@gmx.de> (https://krutsch.netlify.app/)",
   "license": "MIT",
   "devDependencies": {
-    "@fastify/static": "^5.0.2",
     "@types/cssnano": "^5.0.0",
     "@types/glob": "^7.2.0",
     "@types/html-minifier-terser": "^6.1.0",
@@ -32,6 +31,7 @@
   },
   "bugs": "https://github.com/Krutsch/html-bundle/issues",
   "dependencies": {
+    "@fastify/static": "^5.0.2",
     "@web/parse5-utils": "^1.3.0",
     "await-spawn": "^4.0.2",
     "chokidar": "^3.5.3",
