@@ -21,7 +21,7 @@
     "@types/cssnano": "^5.0.0",
     "@types/glob": "^7.2.0",
     "@types/html-minifier-terser": "^6.1.0",
-    "@types/parse5": "^6.0.3",
+    "@types/parse5": "^7.0.0",
     "@types/postcss-load-config": "^3.0.1",
     "typescript": "^4.7.2"
   },
