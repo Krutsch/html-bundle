@@ -40,7 +40,7 @@
     "esbuild": "^0.15.0",
     "fastify": "^4.0.0",
     "glob": "^8.0.3",
-    "html-minifier-terser": "^6.1.0",
+    "html-minifier-terser": "^7.0.0",
     "hydro-js": "^1.5.13",
     "parse5": "^7.0.0",
     "postcss": "^8.4.14",
