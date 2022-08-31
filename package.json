@@ -19,7 +19,7 @@
   "license": "MIT",
   "devDependencies": {
     "@types/cssnano": "^5.0.0",
-    "@types/glob": "^7.2.0",
+    "@types/glob": "^8.0.0",
     "@types/html-minifier-terser": "^7.0.0",
     "@types/parse5": "^7.0.0",
     "@types/postcss-load-config": "^3.0.1",
