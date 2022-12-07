@@ -37,7 +37,7 @@
     "chokidar": "^3.5.3",
     "critters": "^0.0.16",
     "cssnano": "^5.1.10",
-    "esbuild": "^0.15.0",
+    "esbuild": "^0.16.1",
     "fastify": "^4.0.0",
     "glob": "^8.0.3",
     "html-minifier-terser": "^7.0.0",
