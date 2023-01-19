@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import type { TextNode } from "@web/parse5-utils";
+import type { Node, TextNode } from "@web/parse5-utils";
 import type { AcceptedPlugin } from "postcss";
 import { performance } from "perf_hooks";
 import { readFile, rm, writeFile, readdir, lstat } from "fs/promises";
@@ -63,8 +63,10 @@ async function build(err: any, files: string[], firstRun = true) {
 
   if (isHMR && firstRun) {
     fastify = await createDefaultServer(isSecure);
-    fastify.listen(bundleConfig.port);
-    console.log(`💻 Sever listening on port ${bundleConfig.port}.`);
+    await fastify.listen({ port: bundleConfig.port });
+    console.log(
+      `💻 Sever listening on http${isSecure ? "s" : ""}://localhost:5000.`
+    );
   }
 
   for (const file of files) {
@@ -288,7 +290,7 @@ async function writeInlineScripts(file: string) {
   }
   htmlFilesCache.set(file, [fileText, DOM]);
 
-  const scripts = findElements(DOM, (e) => getTagName(e) === "script");
+  const scripts = findElements(DOM as Node, (e) => getTagName(e) === "script");
   for (let index = 0; index < scripts.length; index++) {
     const script = scripts[index];
     const scriptTextNode = script.childNodes[0] as TextNode;

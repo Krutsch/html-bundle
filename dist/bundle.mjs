@@ -44,8 +44,8 @@ async function build(err, files, firstRun = true) {
     }
     if (isHMR && firstRun) {
         fastify = await createDefaultServer(isSecure);
-        fastify.listen(bundleConfig.port);
-        console.log(`💻 Sever listening on port ${bundleConfig.port}.`);
+        await fastify.listen({ port: bundleConfig.port });
+        console.log(`💻 Sever listening on http${isSecure ? "s" : ""}://localhost:5000.`);
     }
     for (const file of files) {
         await createDir(file);

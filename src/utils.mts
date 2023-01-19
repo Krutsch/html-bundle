@@ -1,4 +1,4 @@
-import type { ParentNode } from "@web/parse5-utils";
+import type { Node, ParentNode } from "@web/parse5-utils";
 import type { FastifyServerOptions } from "fastify";
 import { copyFile, mkdir, readFile } from "fs/promises";
 import path from "path";
@@ -124,7 +124,7 @@ export function addHMRCode(
   let DOM;
   if (html.includes("<!DOCTYPE html>") || html.includes("<html")) {
     DOM = ast || parse(html);
-    const headNode = findElement(DOM, (e) => getTagName(e) === "head");
+    const headNode = findElement(DOM as Node, (e) => getTagName(e) === "head");
     appendChild(headNode, script);
   } else {
     DOM = ast || parseFragment(html);
@@ -136,7 +136,7 @@ export function addHMRCode(
     node.attrs?.push({ name: "data-hmr", value: htmlIdMap.get(file) })
   );
 
-  return serialize(DOM as ParentNode);
+  return serialize(DOM as any);
 }
 
 function randomText() {
