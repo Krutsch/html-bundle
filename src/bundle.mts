@@ -230,7 +230,6 @@ async function minifyCode(): Promise<unknown> {
       entryPoints: Array.from(inlineFiles),
       charset: "utf8",
       format: "esm",
-      incremental: isHMR,
       sourcemap: isHMR,
       splitting: true,
       define: {

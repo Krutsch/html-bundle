@@ -189,7 +189,6 @@ async function minifyCode() {
             entryPoints: Array.from(inlineFiles),
             charset: "utf8",
             format: "esm",
-            incremental: isHMR,
             sourcemap: isHMR,
             splitting: true,
             define: {
