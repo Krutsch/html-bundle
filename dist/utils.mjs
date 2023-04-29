@@ -12,11 +12,11 @@ export function fileCopy(file) {
 }
 export function createDir(file) {
     const buildPath = getBuildPath(file);
-    const dir = buildPath.split("/").slice(0, -1).join("/");
+    const dir = buildPath.split(path.sep).slice(0, -1).join(path.sep);
     return mkdir(dir, { recursive: true });
 }
 export function getBuildPath(file) {
-    return file.replace(`${bundleConfig.src}/`, `${bundleConfig.build}/`);
+    return file.replace(`${bundleConfig.src}${path.sep}`, `${bundleConfig.build}${path.sep}`);
 }
 const CONNECTIONS = []; // In order to send the HMR information
 export let serverSentEvents;
@@ -31,11 +31,11 @@ export async function createDefaultServer(isSecure) {
         }
         : void 0);
     fastify.setNotFoundHandler(async (_req, reply) => {
-        const file = await readFile(path.join(process.cwd(), bundleConfig.build, "/index.html"), {
+        const file = await readFile(path.join(process.cwd(), bundleConfig.build, `${path.sep}index.html`), {
             encoding: "utf-8",
         });
         reply.header("Content-Type", "text/html; charset=UTF-8");
-        return reply.send(addHMRCode(file, `${bundleConfig.src}/index.html`));
+        return reply.send(addHMRCode(file, `${bundleConfig.src}${path.sep}index.html`));
     });
     fastify.register(fastifyStatic, {
         root: path.join(process.cwd(), bundleConfig.build),

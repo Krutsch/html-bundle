@@ -3,7 +3,8 @@ import { performance } from "perf_hooks";
 import { readFile, rm, writeFile, readdir, lstat } from "fs/promises";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import glob from "glob";
+import { sep } from "path";
+import { glob } from "glob";
 import postcss from "postcss";
 import esbuild from "esbuild";
 import Critters from "critters";
@@ -36,16 +37,11 @@ const execFilePromise = promisify(execFile);
 if (bundleConfig.deletePrev) {
     await rm(bundleConfig.build, { force: true, recursive: true });
 }
-glob(`${bundleConfig.src}/**/*`, build);
-async function build(err, files, firstRun = true) {
-    if (err) {
-        console.error(err);
-        process.exit(1);
-    }
+async function build(files, firstRun = true) {
     if (isHMR && firstRun) {
         fastify = await createDefaultServer(isSecure);
         await fastify.listen({ port: bundleConfig.port });
-        console.log(`💻 Sever listening on http${isSecure ? "s" : ""}://localhost:5000.`);
+        console.log(`💻 Sever listening on http${isSecure ? "s" : ""}://localhost:${bundleConfig.port}.`);
     }
     for (const file of files) {
         await createDir(file);
@@ -97,12 +93,12 @@ async function build(err, files, firstRun = true) {
             tailwindCSSWatcher.on("change", async () => await rebuildCSS(cssFiles, "tailwind"));
             tsConfigWatcher.on("change", async () => {
                 timer = performance.now();
-                await build(null, files, false);
+                await build(files, false);
             });
         }
         const watcher = watch(bundleConfig.src);
         watcher.on("add", async (file) => {
-            file = String.raw `${file}`.replace(/\\/g, "/"); // glob and chokidar diff
+            file = String.raw `${file}`.replace(/\\/g, sep); // glob and chokidar diff
             if (files.includes(file) || INLINE_BUNDLE_FILE.test(file)) {
                 return;
             }
@@ -113,7 +109,7 @@ async function build(err, files, firstRun = true) {
             if (INLINE_BUNDLE_FILE.test(file)) {
                 return;
             }
-            file = String.raw `${file}`.replace(/\\/g, "/");
+            file = String.raw `${file}`.replace(/\\/g, sep);
             await rebuild(file);
             console.log(`⚡ modified ${file} on the build`);
         });
@@ -121,13 +117,13 @@ async function build(err, files, firstRun = true) {
             if (INLINE_BUNDLE_FILE.test(file)) {
                 return;
             }
-            file = String.raw `${file}`.replace(/\\/g, "/");
+            file = String.raw `${file}`.replace(/\\/g, sep);
             inlineFiles.delete(file);
             const buildFile = getBuildPath(file)
                 .replace(".ts", ".js")
                 .replace(".jsx", ".js");
             await rm(buildFile);
-            const bfDir = buildFile.split("/").slice(0, -1).join("/");
+            const bfDir = buildFile.split(sep).slice(0, -1).join(sep);
             const stats = await readdir(bfDir);
             if (!stats.length)
                 await rm(bfDir);
@@ -338,4 +334,12 @@ async function rebuildCSS(files, config) {
     }
     if (config)
         console.log(`⚡ modified ${config}.config`);
+}
+try {
+    const files = await glob(`${bundleConfig.src}/**/*`);
+    await build(files);
+}
+catch (err) {
+    console.error(err);
+    process.exit(1);
 }
