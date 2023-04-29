@@ -132,7 +132,7 @@ async function build(files: string[], firstRun = true) {
 
     const watcher = watch(bundleConfig.src);
     watcher.on("add", async (file) => {
-      file = String.raw`${file}`.replace(/\\/g, sep); // glob and chokidar diff
+      file = String.raw`${file}`.replace(/\\/g, "/"); // glob and chokidar diff
       if (files.includes(file) || INLINE_BUNDLE_FILE.test(file)) {
         return;
       }
@@ -145,7 +145,7 @@ async function build(files: string[], firstRun = true) {
       if (INLINE_BUNDLE_FILE.test(file)) {
         return;
       }
-      file = String.raw`${file}`.replace(/\\/g, sep);
+      file = String.raw`${file}`.replace(/\\/g, "/");
 
       await rebuild(file);
 
@@ -155,7 +155,7 @@ async function build(files: string[], firstRun = true) {
       if (INLINE_BUNDLE_FILE.test(file)) {
         return;
       }
-      file = String.raw`${file}`.replace(/\\/g, sep);
+      file = String.raw`${file}`.replace(/\\/g, "/");
 
       inlineFiles.delete(file);
       const buildFile = getBuildPath(file)
@@ -163,7 +163,7 @@ async function build(files: string[], firstRun = true) {
         .replace(".jsx", ".js");
       await rm(buildFile);
 
-      const bfDir = buildFile.split(sep).slice(0, -1).join(sep);
+      const bfDir = buildFile.split("/").slice(0, -1).join("/");
       const stats = await readdir(bfDir);
       if (!stats.length) await rm(bfDir);
 
@@ -399,7 +399,7 @@ async function rebuildCSS(files: string[], config?: string) {
 
 try {
   const files = await glob(`${bundleConfig.src}/**/*`);
-  await build(files);
+  await build(files.map((file) => file.replaceAll(sep, "/")));
 } catch (err) {
   console.error(err);
   process.exit(1);
