@@ -44,6 +44,6 @@
     "hydro-js": "^1.5.14",
     "parse5": "^7.1.2",
     "postcss": "^8.4.23",
-    "postcss-load-config": "^4.0.1"
+    "postcss-load-config": "^5.0.0"
   }
 }
