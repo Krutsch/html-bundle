@@ -40,8 +40,8 @@ if (bundleConfig.deletePrev) {
 async function build(files, firstRun = true) {
     if (isHMR && firstRun) {
         fastify = await createDefaultServer(isSecure);
-        await fastify.listen({ port: bundleConfig.port });
-        console.log(`💻 Sever listening on http${isSecure ? "s" : ""}://localhost:${bundleConfig.port}.`);
+        await fastify.listen({ port: bundleConfig.port, host: "::" });
+        console.log(`💻 Server listening on http${isSecure ? "s" : ""}://localhost:${bundleConfig.port}. and is shared in the local network.`);
     }
     for (const file of files) {
         await createDir(file);

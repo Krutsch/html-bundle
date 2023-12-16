@@ -1,6 +1,6 @@
 {
   "name": "html-bundle",
-  "version": "6.0.18",
+  "version": "6.0.19",
   "description": "A very simple bundler for HTML SFC",
   "bin": "./dist/bundle.mjs",
   "scripts": {
@@ -20,10 +20,10 @@
   "devDependencies": {
     "@types/cssnano": "^5.0.0",
     "@types/glob": "^8.1.0",
-    "@types/html-minifier-terser": "^7.0.0",
+    "@types/html-minifier-terser": "^7.0.2",
     "@types/parse5": "^7.0.0",
     "@types/postcss-load-config": "^3.0.1",
-    "typescript": "^5.0.4"
+    "typescript": "^5.3.3"
   },
   "repository": {
     "type": "git",
@@ -31,19 +31,19 @@
   },
   "bugs": "https://github.com/Krutsch/html-bundle/issues",
   "dependencies": {
-    "@fastify/static": "^6.10.1",
-    "@web/parse5-utils": "^2.0.0",
+    "@fastify/static": "^6.12.0",
+    "@web/parse5-utils": "^2.1.0",
     "await-spawn": "^4.0.2",
     "chokidar": "^3.5.3",
     "critters": "^0.0.20",
-    "cssnano": "^6.0.0",
-    "esbuild": "^0.19.0",
-    "fastify": "^4.17.0",
-    "glob": "^10.2.2",
+    "cssnano": "^6.0.2",
+    "esbuild": "^0.19.9",
+    "fastify": "^4.25.1",
+    "glob": "^10.3.10",
     "html-minifier-terser": "^7.2.0",
     "hydro-js": "^1.5.14",
     "parse5": "^7.1.2",
-    "postcss": "^8.4.23",
-    "postcss-load-config": "^5.0.0"
+    "postcss": "^8.4.32",
+    "postcss-load-config": "^5.0.2"
   }
 }
