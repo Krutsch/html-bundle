@@ -1,6 +1,6 @@
 {
   "name": "html-bundle",
-  "version": "6.0.19",
+  "version": "6.0.20",
   "description": "A very simple bundler for HTML SFC",
   "bin": "./dist/bundle.mjs",
   "scripts": {
@@ -37,7 +37,7 @@
     "chokidar": "^3.5.3",
     "critters": "^0.0.20",
     "cssnano": "^6.0.2",
-    "esbuild": "^0.19.9",
+    "esbuild": "^0.19.10",
     "fastify": "^4.25.1",
     "glob": "^10.3.10",
     "html-minifier-terser": "^7.2.0",
