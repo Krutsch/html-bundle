@@ -1,3 +1,6 @@
+import type { Options as HTMLOptions } from "html-minifier-terser";
+import type { Options } from "critters";
+import type { BuildOptions } from "esbuild";
 import type { Node } from "@web/parse5-utils";
 import type { FastifyServerOptions } from "fastify";
 import { copyFile, mkdir, readFile } from "fs/promises";
@@ -86,15 +89,32 @@ export async function getPostCSSConfig() {
   }
 }
 
-async function getBundleConfig() {
+export type Config = {
+  build: string;
+  src: string;
+  port: number;
+  secure: boolean;
+  esbuild?: BuildOptions;
+  "html-minifier-terser"?: HTMLOptions;
+  critical?: Options;
+  deletePrev?: boolean;
+  isCritical?: boolean;
+  hmr?: boolean;
+  handler?: string;
+};
+async function getBundleConfig(): Promise<Config> {
   const base = {
     build: "build",
     src: "src",
     port: 5000,
     esbuild: {},
     "html-minifier-terser": {},
-    critical: {},
     deletePrev: true,
+    critical: {},
+    isCritical: false,
+    hmr: false,
+    secure: false,
+    handler: "",
   };
 
   try {

@@ -72,7 +72,11 @@ async function getBundleConfig() {
         esbuild: {},
         "html-minifier-terser": {},
         critical: {},
+        isCritical: false,
         deletePrev: true,
+        hmr: false,
+        secure: false,
+        handler: "",
     };
     try {
         const cfgPath = path.resolve(process.cwd(), "bundle.config.js");

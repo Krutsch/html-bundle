@@ -19,6 +19,7 @@ const isCritical = process.argv.includes("--isCritical") || bundleConfig.isCriti
 const critters = new Critters({
     path: bundleConfig.build,
     logLevel: "silent",
+    ...bundleConfig.critical,
 });
 const isSecure = process.argv.includes("--secure") || bundleConfig.secure; // uses CSP for critical too
 const handlerFile = process.argv.includes("--handler")
