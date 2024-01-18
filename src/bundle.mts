@@ -293,8 +293,10 @@ async function writeInlineScripts(file: string) {
     const isReferencedScript = script.attrs.find(
       (a: { name: string }) => a.name === "src"
     );
+    const type = script.attrs.find((a: { name: string }) => a.name === "type");
     const scriptContent = scriptTextNode?.value;
-    if (!scriptContent || isReferencedScript) continue;
+    if (!scriptContent || isReferencedScript || type?.value === "importmap")
+      continue;
 
     const jsFile = file.replace(".html", `-bundle-${index}.tsx`);
     inlineFiles.add(jsFile);
@@ -327,7 +329,13 @@ async function minifyHTML(file: string, buildFile: string) {
     const isReferencedScript = script.attrs.find(
       (a: { name: string }) => a.name === "src"
     );
-    if (!scriptTextNode?.value || isReferencedScript) continue;
+    const type = script.attrs.find((a: { name: string }) => a.name === "type");
+    if (
+      !scriptTextNode?.value ||
+      isReferencedScript ||
+      type?.value === "importmap"
+    )
+      continue;
 
     // Use bundled file
     const buildInlineScript = buildFile.replace(".html", `-bundle-${index}.js`);
