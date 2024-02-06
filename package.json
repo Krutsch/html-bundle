@@ -1,8 +1,9 @@
 {
   "name": "html-bundle",
-  "version": "6.0.22",
+  "version": "6.1.0",
   "description": "A very simple bundler for HTML SFC",
   "bin": "./dist/bundle.mjs",
+  "types": "./src/config.d.ts",
   "scripts": {
     "start": "tsc",
     "update": "npx npm-check-updates -u && npx typesync && npm i && npm outdated"
@@ -38,12 +39,12 @@
     "critters": "^0.0.20",
     "cssnano": "^6.0.3",
     "esbuild": "^0.20.0",
-    "fastify": "^4.25.2",
+    "fastify": "^4.26.0",
     "glob": "^10.3.10",
     "html-minifier-terser": "^7.2.0",
     "hydro-js": "^1.5.14",
     "parse5": "^7.1.2",
-    "postcss": "^8.4.33",
+    "postcss": "^8.4.34",
     "postcss-load-config": "^5.0.2"
   }
 }

@@ -138,7 +138,9 @@ async function build(files: string[], firstRun = true) {
         return;
       }
 
-      await rebuild(file);
+      try {
+        await rebuild(file);
+      } catch {}
 
       console.log(`⚡ added ${file} to the build`);
     });
@@ -162,11 +164,13 @@ async function build(files: string[], firstRun = true) {
       const buildFile = getBuildPath(file)
         .replace(".ts", ".js")
         .replace(".jsx", ".js");
-      await rm(buildFile);
 
-      const bfDir = buildFile.split("/").slice(0, -1).join("/");
-      const stats = await readdir(bfDir);
-      if (!stats.length) await rm(bfDir);
+      try {
+        await rm(buildFile);
+        const bfDir = buildFile.split("/").slice(0, -1).join("/");
+        const stats = await readdir(bfDir);
+        if (!stats.length) await rm(bfDir);
+      } catch {}
 
       console.log(`⚡ deleted ${file} from the build`);
     });
@@ -200,6 +204,9 @@ async function build(files: string[], firstRun = true) {
         } else {
           await fileCopy(file);
         }
+      } else if (handlerFile) {
+        const { stdout } = await execFilePromise("node", [handlerFile, file]);
+        if (String(stdout)) console.log("📋 Logging Handler: ", String(stdout));
       }
 
       serverSentEvents?.({ file, html });
@@ -217,7 +224,8 @@ async function minifyCSS(file: string, buildFile: string) {
     });
     await writeFile(buildFile, result.css);
   } catch (err) {
-    console.error(err);
+    // @ts-ignore
+    console.error(err?.reason);
   }
 }
 
@@ -248,7 +256,7 @@ async function minifyCode(): Promise<unknown> {
     let missingPkg = false;
     if (err?.errors) {
       for (const error of err.errors) {
-        if (error.text?.startsWith("Could not resolve")) {
+        if (error.location && error.text?.startsWith("Could not resolve")) {
           missingPkg = true;
           const packageNameRegex = /(?<=").*(?=")/;
           const [pkgName] = error.text.match(packageNameRegex);
@@ -340,14 +348,16 @@ async function minifyHTML(file: string, buildFile: string) {
     // Use bundled file
     const buildInlineScript = buildFile.replace(".html", `-bundle-${index}.js`);
 
-    const scriptContent = await readFile(buildInlineScript, {
-      encoding: "utf-8",
-    });
-    await rm(buildInlineScript);
-    scriptTextNode.value = scriptContent.replace(
-      TEMPLATE_LITERAL_MINIFIER,
-      " "
-    );
+    try {
+      const scriptContent = await readFile(buildInlineScript, {
+        encoding: "utf-8",
+      });
+      await rm(buildInlineScript);
+      scriptTextNode.value = scriptContent.replace(
+        TEMPLATE_LITERAL_MINIFIER,
+        " "
+      );
+    } catch {}
   }
 
   // Minify Inline Style
@@ -357,11 +367,16 @@ async function minifyHTML(file: string, buildFile: string) {
     const styleContent = node?.value;
     if (!styleContent) continue;
 
-    const { css } = await CSSprocessor.process(styleContent, {
-      ...options,
-      from: undefined,
-    });
-    node.value = css;
+    try {
+      const { css } = await CSSprocessor.process(styleContent, {
+        ...options,
+        from: undefined,
+      });
+      node.value = css;
+    } catch {
+      // @ts-ignore
+      console.error(err?.reason);
+    }
   }
 
   fileText = serialize(DOM);

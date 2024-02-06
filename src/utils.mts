@@ -16,6 +16,7 @@ import {
   findElement,
   appendChild,
 } from "@web/parse5-utils";
+import { Config } from "./config";
 
 export const bundleConfig = await getBundleConfig();
 
@@ -89,19 +90,6 @@ export async function getPostCSSConfig() {
   }
 }
 
-export type Config = {
-  build: string;
-  src: string;
-  port: number;
-  secure: boolean;
-  esbuild?: BuildOptions;
-  "html-minifier-terser"?: HTMLOptions;
-  critical?: Options;
-  deletePrev?: boolean;
-  isCritical?: boolean;
-  hmr?: boolean;
-  handler?: string;
-};
 async function getBundleConfig(): Promise<Config> {
   const base = {
     build: "build",

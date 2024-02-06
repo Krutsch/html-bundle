@@ -63,6 +63,19 @@ Generate the config in the root and call it "bundle.config.js"
 **html-minifier-terser:** Your additional config<br>
 **critical:** Your additional config<br>
 
+Example:
+
+```javascript
+/** @type {import('html-bundle').Config} */
+export default {
+  secure: true,
+  handler: "utils/staticFiles.js",
+  esbuild: {
+    external: ["images"],
+  },
+};
+```
+
 ## Concept
 
 The bundler always globs all HTML, CSS and TS/JS files from the `src` (config) directory and processes them to the `build` (config) directory. PostCSS is being used for CSS files and inline styles, html-minifier-terser for HTML and esbuild to bundle, minify, etc. for inline and referenced TS/JS. Server-sent events and [hydro-js](https://github.com/Krutsch/hydro-js) are used for HMR. In order to trigger SPA Routers, the popstate event is being triggered after HMR Operations.
