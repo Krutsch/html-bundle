@@ -31,11 +31,11 @@ export async function createDefaultServer(isSecure) {
         }
         : void 0);
     fastify.setNotFoundHandler(async (_req, reply) => {
+        reply.type("text/html");
         const file = await readFile(path.join(process.cwd(), bundleConfig.build, "/index.html"), {
             encoding: "utf-8",
         });
-        reply.header("Content-Type", "text/html; charset=UTF-8");
-        return reply.send(addHMRCode(file, `${bundleConfig.src}/index.html`));
+        return reply.send(file);
     });
     fastify.register(fastifyStatic, {
         root: path.join(process.cwd(), bundleConfig.build),
