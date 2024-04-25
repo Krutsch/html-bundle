@@ -37,7 +37,7 @@
     "await-spawn": "^4.0.2",
     "chokidar": "^3.6.0",
     "critters": "^0.0.22",
-    "cssnano": "^6.0.3",
+    "cssnano": "^7.0.0",
     "esbuild": "^0.20.0",
     "fastify": "^4.26.1",
     "glob": "^10.3.10",
