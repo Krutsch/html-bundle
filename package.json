@@ -16,7 +16,7 @@
     "esbuild",
     "hydro-js"
   ],
-  "author": "Fabian Krutsch <f.krutsch@gmx.de> (https://krutsch.netlify.app/)",
+  "author": "Fabian Klingenberg <klingenberg.fabian@gmx.de> (https://klingenberg.netlify.app/)",
   "license": "MIT",
   "devDependencies": {
     "@types/cssnano": "^5.0.0",
