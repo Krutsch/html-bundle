@@ -71,8 +71,9 @@ async function build(files: string[], firstRun = true) {
 
     if (!SUPPORTED_FILES.test(file)) {
       if (handlerFile) {
-        const { stdout } = await execFilePromise("node", [handlerFile, file]);
-        if (String(stdout)) console.log("📋 Logging Handler: ", String(stdout));
+        execFilePromise("node", [handlerFile, file]).then(({ stdout }) => {
+          console.log("📋 Logging Handler: ", String(stdout));
+        });
       } else {
         if ((await lstat(file)).isDirectory()) continue;
         await fileCopy(file);
@@ -198,15 +199,16 @@ async function build(files: string[], firstRun = true) {
         await minifyCode();
       } else if (!file.endsWith(".css")) {
         if (handlerFile) {
-          const { stdout } = await execFilePromise("node", [handlerFile, file]);
-          if (String(stdout))
+          execFilePromise("node", [handlerFile, file]).then(({ stdout }) => {
             console.log("📋 Logging Handler: ", String(stdout));
+          });
         } else {
           await fileCopy(file);
         }
       } else if (handlerFile) {
-        const { stdout } = await execFilePromise("node", [handlerFile, file]);
-        if (String(stdout)) console.log("📋 Logging Handler: ", String(stdout));
+        execFilePromise("node", [handlerFile, file]).then(({ stdout }) => {
+          console.log("📋 Logging Handler: ", String(stdout));
+        });
       }
 
       serverSentEvents?.({ file, html });
