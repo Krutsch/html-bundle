@@ -56,16 +56,6 @@ if (bundleConfig.deletePrev) {
 }
 
 async function build(files: string[], firstRun = true) {
-  if (isHMR && firstRun) {
-    fastify = await createDefaultServer(isSecure);
-    await fastify.listen({ port: bundleConfig.port, host: "::" });
-    console.log(
-      `💻 Server listening on http${isSecure ? "s" : ""}://localhost:${
-        bundleConfig.port
-      }. and is shared in the local network.`
-    );
-  }
-
   for (const file of files) {
     await createDir(file);
 
@@ -106,6 +96,14 @@ async function build(files: string[], firstRun = true) {
   );
 
   if (isHMR && firstRun) {
+    fastify = await createDefaultServer(isSecure);
+    await fastify.listen({ port: bundleConfig.port, host: "::" });
+    console.log(
+      `💻 Server listening on http${isSecure ? "s" : ""}://localhost:${
+        bundleConfig.port
+      } and is shared in the local network.`
+    );
+
     console.log(`⌛ Waiting for file changes ...`);
 
     if (postcssFile) {

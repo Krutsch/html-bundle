@@ -39,11 +39,6 @@ if (bundleConfig.deletePrev) {
     await rm(bundleConfig.build, { force: true, recursive: true });
 }
 async function build(files, firstRun = true) {
-    if (isHMR && firstRun) {
-        fastify = await createDefaultServer(isSecure);
-        await fastify.listen({ port: bundleConfig.port, host: "::" });
-        console.log(`💻 Server listening on http${isSecure ? "s" : ""}://localhost:${bundleConfig.port}. and is shared in the local network.`);
-    }
     for (const file of files) {
         await createDir(file);
         if (!SUPPORTED_FILES.test(file)) {
@@ -84,6 +79,9 @@ async function build(files, firstRun = true) {
     }
     console.log(`🚀 Build finished in ${(performance.now() - timer).toFixed(2)}ms ✨`);
     if (isHMR && firstRun) {
+        fastify = await createDefaultServer(isSecure);
+        await fastify.listen({ port: bundleConfig.port, host: "::" });
+        console.log(`💻 Server listening on http${isSecure ? "s" : ""}://localhost:${bundleConfig.port} and is shared in the local network.`);
         console.log(`⌛ Waiting for file changes ...`);
         if (postcssFile) {
             const postCSSWatcher = watch(postcssFile);
