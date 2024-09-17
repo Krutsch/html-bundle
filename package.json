@@ -32,7 +32,7 @@
   },
   "bugs": "https://github.com/Krutsch/html-bundle/issues",
   "dependencies": {
-    "@fastify/static": "^7.0.4",
+    "@fastify/static": "^8.0.0",
     "@web/parse5-utils": "^2.1.0",
     "await-spawn": "^4.0.2",
     "chokidar": "^4.0.0",
