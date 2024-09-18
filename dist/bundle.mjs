@@ -80,13 +80,14 @@ async function build(files, firstRun = true) {
     console.log(`🚀 Build finished in ${(performance.now() - timer).toFixed(2)}ms ✨`);
     if (isHMR && firstRun) {
         fastify = await createDefaultServer(isSecure);
-        await fastify.listen({ port: bundleConfig.port, host: "::" });
-        console.log(`💻 Server listening on http${isSecure ? "s" : ""}://localhost:${bundleConfig.port} and is shared in the local network.`);
+        await fastify.listen({ port: bundleConfig.port, host: bundleConfig.host });
+        console.log(`💻 Server listening on http${isSecure ? "s" : ""}://${bundleConfig.host === "::" ? "localhost" : bundleConfig.host}:${bundleConfig.port} and is shared in the local network.`);
         console.log(`⌛ Waiting for file changes ...`);
+        const chokidarOptions = { awaitWriteFinish: false };
         if (postcssFile) {
-            const postCSSWatcher = watch(postcssFile);
-            const tailwindCSSWatcher = watch(postcssFile.replace("postcss", "tailwind")); // Assuming that the file ext is the same
-            const tsConfigWatcher = watch(postcssFile.split("\\").slice(0, -1).join("\\") + "\\tsconfig.json");
+            const postCSSWatcher = watch(postcssFile, chokidarOptions);
+            const tailwindCSSWatcher = watch(postcssFile.replace("postcss", "tailwind"), chokidarOptions); // Assuming that the file ext is the same
+            const tsConfigWatcher = watch(postcssFile.split("\\").slice(0, -1).join("\\") + "\\tsconfig.json", chokidarOptions);
             const cssFiles = files.filter((file) => file.endsWith(".css"));
             postCSSWatcher.on("change", async () => await rebuildCSS(cssFiles, "postcss"));
             tailwindCSSWatcher.on("change", async () => await rebuildCSS(cssFiles, "tailwind"));
@@ -95,7 +96,7 @@ async function build(files, firstRun = true) {
                 await build(files, false);
             });
         }
-        const watcher = watch(bundleConfig.src);
+        const watcher = watch(bundleConfig.src, chokidarOptions);
         watcher.on("add", async (file) => {
             file = String.raw `${file}`.replace(/\\/g, "/"); // glob and chokidar diff
             if (files.includes(file) || INLINE_BUNDLE_FILE.test(file)) {

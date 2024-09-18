@@ -10,4 +10,7 @@ export type Config = {
   isCritical?: boolean;
   hmr?: boolean;
   handler?: string;
+  host?: string;
+  key?: Buffer;
+  cert?: Buffer;
 };

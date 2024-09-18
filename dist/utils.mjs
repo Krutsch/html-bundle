@@ -25,8 +25,8 @@ export async function createDefaultServer(isSecure) {
         ? {
             http2: true,
             https: {
-                key: await readFile(path.join(process.cwd(), "localhost-key.pem")),
-                cert: await readFile(path.join(process.cwd(), "localhost.pem")),
+                key: bundleConfig.key,
+                cert: bundleConfig.cert,
             },
         }
         : void 0);
@@ -77,6 +77,9 @@ async function getBundleConfig() {
         hmr: false,
         secure: false,
         handler: "",
+        host: "::",
+        key: await readFile(path.join(process.cwd(), "localhost-key.pem")),
+        cert: await readFile(path.join(process.cwd(), "localhost.pem")),
     };
     try {
         const cfgPath = path.resolve(process.cwd(), "bundle.config.js");
