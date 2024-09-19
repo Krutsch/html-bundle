@@ -44,8 +44,12 @@ export async function createDefaultServer(isSecure: boolean) {
       ? ({
           http2: true,
           https: {
-            key: bundleConfig.key,
-            cert: bundleConfig.cert,
+            key:
+              bundleConfig.key ||
+              (await readFile(path.join(process.cwd(), "localhost-key.pem"))),
+            cert:
+              bundleConfig.cert ||
+              (await readFile(path.join(process.cwd(), "localhost.pem"))),
           },
         } as FastifyServerOptions)
       : void 0
@@ -104,8 +108,6 @@ async function getBundleConfig(): Promise<Config> {
     secure: false,
     handler: "",
     host: "::",
-    key: await readFile(path.join(process.cwd(), "localhost-key.pem")),
-    cert: await readFile(path.join(process.cwd(), "localhost.pem")),
   };
 
   try {
