@@ -125,7 +125,9 @@ function getHMRCode(file, id, src) {
       }, 1000);
     });
     window.eventsource${id}.addEventListener("message", ({ data }) => {
-      window.lastScroll = window.scrollY;
+      if (window.lastScroll == null) {  
+        window.lastScroll = window.scrollY;
+      }
       const dataObj = JSON.parse(data);
       const file = "${file}";
 
@@ -141,10 +143,14 @@ function getHMRCode(file, id, src) {
         
         if (dataObj.html.startsWith('<!DOCTYPE html>') || dataObj.html.startsWith('<html')) {
           document.head.remove(); // Don't try to diff the head – just re-run the scripts
-          render(newHTML, document.documentElement, false);
-          setTimeout(() => {
+
+          // Restore Scroll
+          window.addEventListener("afterRouting", () => {
             window.scrollTo(0, window.lastScroll);
-          }, 50);
+            delete window.lastScroll;
+          }, { once: true })
+
+          render(newHTML, document.documentElement, false);
         } else {
           const hmrID = "${id}";
           const hmrElems = Array.from(newHTML.childNodes);
