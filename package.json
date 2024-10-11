@@ -36,7 +36,7 @@
     "@web/parse5-utils": "^2.1.0",
     "await-spawn": "^4.0.2",
     "chokidar": "^4.0.1",
-    "critters": "^0.0.24",
+    "critters": "^0.0.25",
     "cssnano": "^7.0.6",
     "esbuild": "^0.24.0",
     "fastify": "^5.0.0",
