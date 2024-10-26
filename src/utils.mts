@@ -1,6 +1,3 @@
-import type { Options as HTMLOptions } from "html-minifier-terser";
-import type { Options } from "critters";
-import type { BuildOptions } from "esbuild";
 import type { Node } from "@web/parse5-utils";
 import type { FastifyServerOptions } from "fastify";
 import { copyFile, mkdir, readFile } from "fs/promises";

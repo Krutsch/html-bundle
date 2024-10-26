@@ -1,6 +1,6 @@
 {
   "name": "html-bundle",
-  "version": "6.1.7",
+  "version": "6.1.8",
   "description": "A very simple bundler for HTML SFC",
   "bin": "./dist/bundle.mjs",
   "types": "./src/config.d.ts",
@@ -19,12 +19,12 @@
   "author": "Fabian Klingenberg <klingenberg.fabian@gmx.de> (https://klingenberg.netlify.app/)",
   "license": "MIT",
   "devDependencies": {
-    "@types/cssnano": "^5.1.0",
+    "@types/cssnano": "^5.1.3",
     "@types/glob": "^8.1.0",
     "@types/html-minifier-terser": "^7.0.2",
     "@types/parse5": "^7.0.0",
     "@types/postcss-load-config": "^3.0.1",
-    "typescript": "^5.6.2"
+    "typescript": "^5.6.3"
   },
   "repository": {
     "type": "git",
@@ -32,18 +32,18 @@
   },
   "bugs": "https://github.com/Krutsch/html-bundle/issues",
   "dependencies": {
-    "@fastify/static": "^8.0.1",
+    "@fastify/static": "^8.0.2",
     "@web/parse5-utils": "^2.1.0",
     "await-spawn": "^4.0.2",
+    "beasties": "^0.1.0",
     "chokidar": "^4.0.1",
-    "critters": "^0.0.25",
     "cssnano": "^7.0.6",
     "esbuild": "^0.24.0",
     "fastify": "^5.0.0",
     "glob": "^11.0.0",
     "html-minifier-terser": "^7.2.0",
-    "hydro-js": "^1.5.21",
-    "parse5": "^7.1.2",
+    "hydro-js": "^1.5.22",
+    "parse5": "^7.2.0",
     "postcss": "^8.4.47",
     "postcss-load-config": "^6.0.1"
   }

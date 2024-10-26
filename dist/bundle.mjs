@@ -7,7 +7,7 @@ import { sep } from "path";
 import { glob } from "glob";
 import postcss from "postcss";
 import esbuild from "esbuild";
-import Critters from "critters";
+import Beasties from "beasties";
 import { minify } from "html-minifier-terser";
 import { watch } from "chokidar";
 import { serialize, parse, parseFragment } from "parse5";
@@ -16,7 +16,7 @@ import awaitSpawn from "await-spawn";
 import { fileCopy, createDefaultServer, getPostCSSConfig, getBuildPath, createDir, bundleConfig, serverSentEvents, addHMRCode, } from "./utils.mjs";
 const isHMR = process.argv.includes("--hmr") || bundleConfig.hmr;
 const isCritical = process.argv.includes("--isCritical") || bundleConfig.isCritical;
-const critters = new Critters({
+const beasties = new Beasties({
     path: bundleConfig.build,
     logLevel: "silent",
     ...bundleConfig.critical,
@@ -336,8 +336,8 @@ async function minifyHTML(file, buildFile) {
     if (isCritical) {
         try {
             const isPartical = !fileText.startsWith("<!DOCTYPE html>");
-            fileText = await critters.process(fileText);
-            // fix critters jsdom
+            fileText = await beasties.process(fileText);
+            // fix beasties jsdom
             if (isPartical) {
                 fileText = fileText.replace(/<\/?(html|head|body)>/g, "");
             }
