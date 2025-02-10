@@ -38,7 +38,7 @@
     "beasties": "^0.2.0",
     "chokidar": "^4.0.1",
     "cssnano": "^7.0.6",
-    "esbuild": "^0.24.0",
+    "esbuild": "^0.25.0",
     "fastify": "^5.0.0",
     "glob": "^11.0.0",
     "html-minifier-terser": "^7.2.0",
