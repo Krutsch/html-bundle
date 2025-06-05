@@ -1,9 +1,15 @@
 {
   "name": "html-bundle",
-  "version": "6.1.8",
+  "version": "6.2.0",
   "description": "A very simple bundler for HTML SFC",
   "bin": "./dist/bundle.mjs",
-  "types": "./src/config.d.ts",
+  "main": "./dist/bundle.mjs",
+  "module": "./dist/bundle.mjs",
+  "exports": {
+    "import": "./dist/bundle.mjs",
+    "default": "./dist/bundle.mjs"
+  },
+  "types": "./dist/bundle.d.mts",
   "scripts": {
     "start": "tsc",
     "update": "npx npm-check-updates -u && npx typesync && npm i && npm outdated"
@@ -20,11 +26,12 @@
   "license": "MIT",
   "devDependencies": {
     "@types/cssnano": "^5.1.3",
+    "@types/express": "~5.0.2",
     "@types/glob": "^8.1.0",
     "@types/html-minifier-terser": "^7.0.2",
     "@types/parse5": "^7.0.0",
     "@types/postcss-load-config": "^3.0.1",
-    "typescript": "^5.6.3"
+    "typescript": "^5.8.3"
   },
   "repository": {
     "type": "git",
@@ -32,19 +39,18 @@
   },
   "bugs": "https://github.com/Krutsch/html-bundle/issues",
   "dependencies": {
-    "@fastify/static": "^8.0.2",
     "@web/parse5-utils": "^2.1.0",
     "await-spawn": "^4.0.2",
-    "beasties": "^0.3.1",
-    "chokidar": "^4.0.1",
-    "cssnano": "^7.0.6",
-    "esbuild": "^0.25.0",
-    "fastify": "^5.0.0",
-    "glob": "^11.0.0",
+    "beasties": "^0.3.4",
+    "chokidar": "^4.0.3",
+    "cssnano": "^7.0.7",
+    "esbuild": "^0.25.5",
+    "express": "^5.1.0",
+    "glob": "^11.0.2",
     "html-minifier-terser": "^7.2.0",
-    "hydro-js": "^1.5.22",
-    "parse5": "^7.2.0",
-    "postcss": "^8.4.47",
+    "hydro-js": "^1.8.8",
+    "parse5": "^7.3.0",
+    "postcss": "^8.5.4",
     "postcss-load-config": "^6.0.1"
   }
 }

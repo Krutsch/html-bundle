@@ -29,7 +29,7 @@ process.env.NODE_ENV = isHMR ? "development" : "production"; // just in case oth
 let timer = performance.now();
 let { plugins, options, file: postcssFile } = await getPostCSSConfig();
 let CSSprocessor = postcss(plugins);
-let fastify;
+let router;
 const inlineFiles = new Set();
 const TEMPLATE_LITERAL_MINIFIER = /\n\s+/g;
 const INLINE_BUNDLE_FILE = /-bundle-\d+.tsx$/;
@@ -79,8 +79,9 @@ async function build(files, firstRun = true) {
     }
     console.log(`🚀 Build finished in ${(performance.now() - timer).toFixed(2)}ms ✨`);
     if (isHMR && firstRun) {
-        fastify = await createDefaultServer(isSecure);
-        await fastify.listen({ port: bundleConfig.port, host: bundleConfig.host });
+        const [dynamicRouter, server] = await createDefaultServer(isSecure);
+        router = dynamicRouter;
+        server.listen({ port: bundleConfig.port, host: bundleConfig.host });
         console.log(`💻 Server listening on http${isSecure ? "s" : ""}://${bundleConfig.host === "::" ? "localhost" : bundleConfig.host}:${bundleConfig.port} and is shared in the local network.`);
         console.log(`⌛ Waiting for file changes ...`);
         const chokidarOptions = { awaitWriteFinish: false };
@@ -368,3 +369,4 @@ catch (err) {
     console.error(err);
     process.exit(1);
 }
+export default router;

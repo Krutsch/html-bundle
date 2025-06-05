@@ -1,9 +1,11 @@
 import type { Node } from "@web/parse5-utils";
-import type { FastifyServerOptions } from "fastify";
+import type { Config } from "./bundle.mjs";
+import type { Router } from "express-serve-static-core";
 import { copyFile, mkdir, readFile } from "fs/promises";
 import path from "path";
-import Fastify from "fastify";
-import fastifyStatic from "@fastify/static";
+import http, { type Server } from "http";
+import https, { type Server as HTTPSServer } from "https";
+import express from "express";
 import postcssrc from "postcss-load-config";
 import cssnano from "cssnano";
 import { parse, parseFragment, serialize } from "parse5";
@@ -13,7 +15,6 @@ import {
   findElement,
   appendChild,
 } from "@web/parse5-utils";
-import { Config } from "./config";
 
 export const bundleConfig = await getBundleConfig();
 
@@ -35,42 +36,19 @@ const CONNECTIONS: Array<any> = []; // In order to send the HMR information
 export let serverSentEvents:
   | undefined
   | (({ file, html }: { file: string; html?: string }) => void);
-export async function createDefaultServer(isSecure: boolean) {
-  const fastify = Fastify(
-    isSecure
-      ? ({
-          http2: true,
-          https: {
-            key:
-              bundleConfig.key ||
-              (await readFile(path.join(process.cwd(), "localhost-key.pem"))),
-            cert:
-              bundleConfig.cert ||
-              (await readFile(path.join(process.cwd(), "localhost.pem"))),
-          },
-        } as FastifyServerOptions)
-      : void 0
-  );
-  fastify.setNotFoundHandler(async (_req, reply) => {
-    reply.type("text/html");
-    const file = await readFile(
-      path.join(process.cwd(), bundleConfig.build, "/index.html"),
-      {
-        encoding: "utf-8",
-      }
-    );
-    return reply.send(file);
-  });
-  fastify.register(fastifyStatic, {
-    root: path.join(process.cwd(), bundleConfig.build),
-  });
-  fastify.get("/hmr", (_req, reply) => {
-    reply.raw.setHeader("Content-Type", "text/event-stream");
-    reply.raw.setHeader("Cache-Control", "no-cache");
-    !isSecure && reply.raw.setHeader("Connection", "keep-alive");
+export async function createDefaultServer(
+  isSecure: boolean
+): Promise<[Router, Server | HTTPSServer]> {
+  const router = express.Router();
+  const app = express();
+  app.use(router);
+  app.use(express.static(path.join(process.cwd(), bundleConfig.build)));
 
-    CONNECTIONS.push(reply.raw);
-
+  router.get("/hmr", (_req, reply) => {
+    reply.setHeader("Content-Type", "text/event-stream");
+    reply.setHeader("Cache-Control", "no-cache");
+    !isSecure && reply.setHeader("Connection", "keep-alive");
+    CONNECTIONS.push(reply);
     serverSentEvents = (data) => {
       if (/\.(jsx?|tsx?)$/.test(data.file)) {
         data.file = data.file.replace(".ts", ".js").replace(".jsx", ".js");
@@ -80,7 +58,34 @@ export async function createDefaultServer(isSecure: boolean) {
       });
     };
   });
-  return fastify;
+
+  app.use(async (_req, res) => {
+    res.setHeader("Content-Type", "text/html");
+    const file = await readFile(
+      path.join(process.cwd(), bundleConfig.build, "index.html"),
+      {
+        encoding: "utf-8",
+      }
+    );
+    res.send(file);
+  });
+
+  return [
+    router,
+    isSecure
+      ? https.createServer(
+          {
+            key:
+              bundleConfig.key ||
+              (await readFile(path.join(process.cwd(), "localhost-key.pem"))),
+            cert:
+              bundleConfig.cert ||
+              (await readFile(path.join(process.cwd(), "localhost.pem"))),
+          },
+          app
+        )
+      : http.createServer({}, app),
+  ];
 }
 
 export async function getPostCSSConfig() {

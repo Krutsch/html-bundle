@@ -2,6 +2,7 @@
 
 import type { Node, TextNode } from "@web/parse5-utils";
 import type { AcceptedPlugin } from "postcss";
+import type { Router } from "express-serve-static-core";
 import { performance } from "perf_hooks";
 import { readFile, rm, writeFile, readdir, lstat } from "fs/promises";
 import { execFile } from "child_process";
@@ -9,9 +10,10 @@ import { promisify } from "util";
 import { sep } from "path";
 import { glob } from "glob";
 import postcss from "postcss";
-import esbuild from "esbuild";
-import Beasties from "beasties";
-import { minify } from "html-minifier-terser";
+import express from "express";
+import esbuild, { type BuildOptions } from "esbuild";
+import Beasties, { type Options } from "beasties";
+import { minify, type Options as MinifyOptions } from "html-minifier-terser";
 import { watch } from "chokidar";
 import { serialize, parse, parseFragment } from "parse5";
 import { getTagName, findElements } from "@web/parse5-utils";
@@ -44,7 +46,7 @@ process.env.NODE_ENV = isHMR ? "development" : "production"; // just in case oth
 let timer = performance.now();
 let { plugins, options, file: postcssFile } = await getPostCSSConfig();
 let CSSprocessor = postcss(plugins as AcceptedPlugin[]);
-let fastify;
+let router: Router | undefined;
 const inlineFiles = new Set<string>();
 const TEMPLATE_LITERAL_MINIFIER = /\n\s+/g;
 const INLINE_BUNDLE_FILE = /-bundle-\d+.tsx$/;
@@ -96,8 +98,9 @@ async function build(files: string[], firstRun = true) {
   );
 
   if (isHMR && firstRun) {
-    fastify = await createDefaultServer(isSecure);
-    await fastify.listen({ port: bundleConfig.port, host: bundleConfig.host });
+    const [dynamicRouter, server] = await createDefaultServer(isSecure);
+    router = dynamicRouter;
+    server.listen({ port: bundleConfig.port, host: bundleConfig.host });
     console.log(
       `💻 Server listening on http${isSecure ? "s" : ""}://${
         bundleConfig.host === "::" ? "localhost" : bundleConfig.host
@@ -431,3 +434,22 @@ try {
   console.error(err);
   process.exit(1);
 }
+
+export default router;
+
+export type Config = {
+  build: string;
+  src: string;
+  port: number;
+  secure: boolean;
+  esbuild?: BuildOptions;
+  "html-minifier-terser"?: MinifyOptions;
+  critical?: Options;
+  deletePrev?: boolean;
+  isCritical?: boolean;
+  hmr?: boolean;
+  handler?: string;
+  host?: string;
+  key?: Buffer;
+  cert?: Buffer;
+};
