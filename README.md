@@ -50,6 +50,17 @@ $ npm run build
 `--isCritical`: uses critical to extract and inline critical-path CSS to HTML.<br>
 `--handler`: path to your custom handler. Here, you can handle all non-supported files. You can get the filename via `process.argv[2]`.
 
+## import
+It is also possible to start the server by importing the package. This could be useful, if you intend to add routes for local development.
+```js
+import router from "html-bundle";
+
+router.get("/test", (_req, reply) => {
+  return reply.send("hi");
+});
+```
+
+
 ## Optional Config
 
 _The CLI flags can also be set by the config. Flags set by the CLI will override the config._
