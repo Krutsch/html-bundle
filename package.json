@@ -27,7 +27,7 @@
   "devDependencies": {
     "@types/cssnano": "^5.1.3",
     "@types/express": "~5.0.2",
-    "@types/glob": "^8.1.0",
+    "@types/glob": "^9.0.0",
     "@types/html-minifier-terser": "^7.0.2",
     "@types/parse5": "^7.0.0",
     "@types/postcss-load-config": "^3.0.1",
