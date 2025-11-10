@@ -44,7 +44,7 @@
     "beasties": "^0.3.4",
     "chokidar": "^4.0.3",
     "cssnano": "^7.0.7",
-    "esbuild": "^0.25.5",
+    "esbuild": "^0.27.0",
     "express": "^5.1.0",
     "glob": "^11.0.2",
     "html-minifier-terser": "^7.2.0",
