@@ -94,7 +94,7 @@ async function build(files: string[], firstRun = true) {
   }
 
   console.log(
-    `🚀 Build finished in ${(performance.now() - timer).toFixed(2)}ms ✨`
+    `🚀 Build finished in ${(performance.now() - timer).toFixed(2)}ms ✨`,
   );
 
   if (isHMR && firstRun) {
@@ -104,7 +104,7 @@ async function build(files: string[], firstRun = true) {
     console.log(
       `💻 Server listening on http${isSecure ? "s" : ""}://${
         bundleConfig.host === "::" ? "localhost" : bundleConfig.host
-      }:${bundleConfig.port} and is shared in the local network.`
+      }:${bundleConfig.port} and is shared in the local network.`,
     );
 
     console.log(`⌛ Waiting for file changes ...`);
@@ -114,21 +114,21 @@ async function build(files: string[], firstRun = true) {
       const postCSSWatcher = watch(postcssFile, chokidarOptions);
       const tailwindCSSWatcher = watch(
         postcssFile.replace("postcss", "tailwind"),
-        chokidarOptions
+        chokidarOptions,
       ); // Assuming that the file ext is the same
       const tsConfigWatcher = watch(
         postcssFile.split("\\").slice(0, -1).join("\\") + "\\tsconfig.json",
-        chokidarOptions
+        chokidarOptions,
       );
 
       const cssFiles = files.filter((file) => file.endsWith(".css"));
       postCSSWatcher.on(
         "change",
-        async () => await rebuildCSS(cssFiles, "postcss")
+        async () => await rebuildCSS(cssFiles, "postcss"),
       );
       tailwindCSSWatcher.on(
         "change",
-        async () => await rebuildCSS(cssFiles, "tailwind")
+        async () => await rebuildCSS(cssFiles, "tailwind"),
       );
       tsConfigWatcher.on("change", async () => {
         timer = performance.now();
@@ -305,7 +305,7 @@ async function writeInlineScripts(file: string) {
     const script = scripts[index];
     const scriptTextNode = script.childNodes[0] as TextNode;
     const isReferencedScript = script.attrs.find(
-      (a: { name: string }) => a.name === "src"
+      (a: { name: string }) => a.name === "src",
     );
     const type = script.attrs.find((a: { name: string }) => a.name === "type");
     const scriptContent = scriptTextNode?.value;
@@ -341,13 +341,14 @@ async function minifyHTML(file: string, buildFile: string) {
     const script = scripts[index];
     const scriptTextNode = script.childNodes[0] as TextNode;
     const isReferencedScript = script.attrs.find(
-      (a: { name: string }) => a.name === "src"
+      (a: { name: string }) => a.name === "src",
     );
     const type = script.attrs.find((a: { name: string }) => a.name === "type");
     if (
       !scriptTextNode?.value ||
       isReferencedScript ||
-      type?.value === "importmap"
+      type?.value === "importmap" ||
+      type?.value === "application/ld+json"
     )
       continue;
 
@@ -361,7 +362,7 @@ async function minifyHTML(file: string, buildFile: string) {
       await rm(buildInlineScript);
       scriptTextNode.value = scriptContent.replace(
         TEMPLATE_LITERAL_MINIFIER,
-        " "
+        " ",
       );
     } catch {}
   }
