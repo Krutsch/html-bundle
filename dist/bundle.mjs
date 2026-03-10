@@ -258,7 +258,10 @@ async function writeInlineScripts(file) {
         const isReferencedScript = script.attrs.find((a) => a.name === "src");
         const type = script.attrs.find((a) => a.name === "type");
         const scriptContent = scriptTextNode?.value;
-        if (!scriptContent || isReferencedScript || type?.value === "importmap")
+        if (!scriptContent ||
+            isReferencedScript ||
+            type?.value === "importmap" ||
+            type?.value === "application/ld+json")
             continue;
         const jsFile = file.replace(".html", `-bundle-${index}.tsx`);
         inlineFiles.add(jsFile);

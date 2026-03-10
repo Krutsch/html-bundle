@@ -309,7 +309,12 @@ async function writeInlineScripts(file: string) {
     );
     const type = script.attrs.find((a: { name: string }) => a.name === "type");
     const scriptContent = scriptTextNode?.value;
-    if (!scriptContent || isReferencedScript || type?.value === "importmap")
+    if (
+      !scriptContent ||
+      isReferencedScript ||
+      type?.value === "importmap" ||
+      type?.value === "application/ld+json"
+    )
       continue;
 
     const jsFile = file.replace(".html", `-bundle-${index}.tsx`);
