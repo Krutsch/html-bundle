@@ -290,7 +290,8 @@ async function minifyHTML(file, buildFile) {
         const type = script.attrs.find((a) => a.name === "type");
         if (!scriptTextNode?.value ||
             isReferencedScript ||
-            type?.value === "importmap")
+            type?.value === "importmap" ||
+            type?.value === "application/ld+json")
             continue;
         // Use bundled file
         const buildInlineScript = buildFile.replace(".html", `-bundle-${index}.js`);
