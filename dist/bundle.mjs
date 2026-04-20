@@ -38,8 +38,15 @@ const execFilePromise = promisify(execFile);
 if (bundleConfig.deletePrev) {
     await rm(bundleConfig.build, { force: true, recursive: true });
 }
+async function cleanupStaleInlineBundleFiles() {
+    const staleFiles = await glob(`${bundleConfig.src}/**/*-bundle-*.tsx`);
+    await Promise.all(staleFiles.map((file) => rm(file.replaceAll(sep, "/"), { force: true })));
+}
 async function build(files, firstRun = true) {
     for (const file of files) {
+        if (INLINE_BUNDLE_FILE.test(file)) {
+            continue;
+        }
         await createDir(file);
         if (!SUPPORTED_FILES.test(file)) {
             if (handlerFile) {
@@ -366,8 +373,11 @@ async function rebuildCSS(files, config) {
         console.log(`⚡ modified ${config}.config`);
 }
 try {
+    await cleanupStaleInlineBundleFiles();
     const files = await glob(`${bundleConfig.src}/**/*`);
-    await build(files.map((file) => file.replaceAll(sep, "/")));
+    await build(files
+        .map((file) => file.replaceAll(sep, "/"))
+        .filter((file) => !INLINE_BUNDLE_FILE.test(file)));
 }
 catch (err) {
     console.error(err);
