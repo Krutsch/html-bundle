@@ -31,7 +31,7 @@
     "@types/html-minifier-terser": "^7.0.2",
     "@types/parse5": "^7.0.0",
     "@types/postcss-load-config": "^3.0.1",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.3"
   },
   "repository": {
     "type": "git",
@@ -39,18 +39,18 @@
   },
   "bugs": "https://github.com/Krutsch/html-bundle/issues",
   "dependencies": {
-    "@web/parse5-utils": "^2.1.0",
+    "@web/parse5-utils": "^2.1.1",
     "await-spawn": "^4.0.2",
-    "beasties": "^0.4.0",
+    "beasties": "^0.4.2",
     "chokidar": "^5.0.0",
-    "cssnano": "^7.0.7",
+    "cssnano": "^7.1.5",
     "esbuild": "^0.28.0",
-    "express": "^5.1.0",
-    "glob": "^13.0.0",
+    "express": "^5.2.1",
+    "glob": "^13.0.6",
     "html-minifier-terser": "^7.2.0",
-    "hydro-js": "^1.8.8",
-    "parse5": "^8.0.0",
-    "postcss": "^8.5.4",
+    "hydro-js": "^1.8.15",
+    "parse5": "^8.0.1",
+    "postcss": "^8.5.10",
     "postcss-load-config": "^6.0.1"
   }
 }
