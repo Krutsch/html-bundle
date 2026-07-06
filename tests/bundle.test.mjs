@@ -91,6 +91,12 @@ test("addHMRCode injects stable HMR wiring", async () => {
 
   assert.match(fullDocument, /<script type="module">/);
   assert.match(fullDocument, /new EventSource\("\/hmr"\)/);
+  assert.match(
+    fullDocument,
+    /window\.htmlBundleHMRConnections \|\|= new Map\(\)/,
+  );
+  assert.match(fullDocument, /window\.addEventListener\("pagehide"/);
+  assert.match(fullDocument, /eventSource\.close\(\)/);
   assert.match(fullDocument, /data-hmr="[^"]+"/);
   assert.ok(
     fullDocument.indexOf("<head>") <
@@ -99,6 +105,7 @@ test("addHMRCode injects stable HMR wiring", async () => {
 
   assert.match(fragment, /^<main data-hmr="[^"]+">Hi<\/main>/);
   assert.match(fragment, /new EventSource\("\/hmr"\)/);
+  assert.match(fragment, /window\.htmlBundleHMRActiveId ===/);
 });
 
 test("getBuildPath maps src paths into the build directory", async () => {

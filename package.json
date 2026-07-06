@@ -1,6 +1,6 @@
 {
   "name": "html-bundle",
-  "version": "6.3.0",
+  "version": "6.3.1",
   "description": "A very simple bundler for HTML SFC",
   "bin": "./dist/bundle.mjs",
   "main": "./dist/bundle.mjs",
@@ -11,7 +11,7 @@
   },
   "types": "./dist/bundle.d.mts",
   "scripts": {
-    "start": "tsc",
+    "start": "tsc && node -e \"require('fs').chmodSync('dist/bundle.mjs', 0o755)\"",
     "test": "npm run start && node --test tests/*.test.mjs",
     "update": "npx npm-check-updates -u && npx typesync && npm i && npm outdated"
   },

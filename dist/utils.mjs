@@ -19,23 +19,31 @@ export function createDir(file) {
 export function getBuildPath(file) {
     return file.replace(`${bundleConfig.src}/`, `${bundleConfig.build}/`);
 }
-const CONNECTIONS = []; // In order to send the HMR information
+const CONNECTIONS = new Set(); // In order to send the HMR information
 export let serverSentEvents;
 export async function createDefaultServer(isSecure) {
     const router = express.Router();
     const app = express();
     app.use(router);
     app.use(express.static(path.join(process.cwd(), bundleConfig.build)));
-    router.get("/hmr", (_req, reply) => {
+    router.get("/hmr", (req, reply) => {
         reply.setHeader("Content-Type", "text/event-stream");
         reply.setHeader("Cache-Control", "no-cache");
         !isSecure && reply.setHeader("Connection", "keep-alive");
-        CONNECTIONS.push(reply);
+        reply.flushHeaders();
+        CONNECTIONS.add(reply);
+        req.on("close", () => {
+            CONNECTIONS.delete(reply);
+        });
         serverSentEvents = (data) => {
             if (/\.(jsx?|tsx?)$/.test(data.file)) {
                 data.file = data.file.replace(".ts", ".js").replace(".jsx", ".js");
             }
             CONNECTIONS.forEach((rep) => {
+                if (rep.destroyed || rep.writableEnded) {
+                    CONNECTIONS.delete(rep);
+                    return;
+                }
                 rep.write(`data: ${JSON.stringify(data)}\n\n`);
             });
         };
@@ -118,14 +126,50 @@ function getHMRCode(file, id, src) {
     return `import { render, html, $, $$, setShouldSetReactivity } from "hydro-js";
   window.isHMR = true;
   window.lastCalled = new Map();
-  if (!window.eventsource${id}) {
-    window.eventsource${id} = new EventSource("/hmr");
-    window.eventsource${id}.addEventListener('error', (e) => {
-      setTimeout(() => {
-        window.eventsource${id} = new EventSource("/hmr");
-      }, 1000);
+  window.htmlBundleHMRConnections ||= new Map();
+  window.htmlBundleHMRActiveId = "${id}";
+  let shouldReconnect = true;
+  let reconnectTimer;
+
+  for (const [hmrId, eventSource] of window.htmlBundleHMRConnections) {
+    if (hmrId !== "${id}") {
+      eventSource.close();
+      window.htmlBundleHMRConnections.delete(hmrId);
+      delete window["eventsource" + hmrId];
+    }
+  }
+
+  function closeEventSource() {
+    const eventSource = window.eventsource${id};
+    if (eventSource) {
+      eventSource.close();
+      window.htmlBundleHMRConnections.delete("${id}");
+      delete window.eventsource${id};
+    }
+  }
+
+  function connectEventSource() {
+    closeEventSource();
+    shouldReconnect = true;
+
+    const eventSource = new EventSource("/hmr");
+    window.eventsource${id} = eventSource;
+    window.htmlBundleHMRConnections.set("${id}", eventSource);
+
+    eventSource.addEventListener('error', () => {
+      eventSource.close();
+      if (window.eventsource${id} === eventSource) {
+        window.htmlBundleHMRConnections.delete("${id}");
+        delete window.eventsource${id};
+      }
+
+      if (shouldReconnect && window.htmlBundleHMRActiveId === "${id}") {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(connectEventSource, 1000);
+      }
     });
-    window.eventsource${id}.addEventListener("message", ({ data }) => {
+
+    eventSource.addEventListener("message", ({ data }) => {
       if (window.lastScroll == null) {  
         window.lastScroll = window.scrollY;
       }
@@ -230,6 +274,19 @@ function getHMRCode(file, id, src) {
         render(clone, elem, false);
       }
     });
+  }
+
+  window.addEventListener("pagehide", () => {
+    shouldReconnect = false;
+    clearTimeout(reconnectTimer);
+    if (window.htmlBundleHMRActiveId === "${id}") {
+      delete window.htmlBundleHMRActiveId;
+    }
+    closeEventSource();
+  }, { once: true });
+
+  if (!window.eventsource${id}) {
+    connectEventSource();
   }
 `;
 }
