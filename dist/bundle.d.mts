@@ -17,6 +17,8 @@ export type Config = {
     isCritical?: boolean;
     hmr?: boolean;
     handler?: string;
+    handlerConcurrency?: number;
+    maxHandlerConcurrency?: number;
     host?: string;
     key?: Buffer;
     cert?: Buffer;

@@ -1,7 +1,7 @@
 import type { Config } from "./bundle.mjs";
 import type { Router } from "express-serve-static-core";
 import { type Server } from "http";
-import { type Server as HTTPSServer } from "https";
+import type { Server as HTTPSServer } from "https";
 import postcssrc from "postcss-load-config";
 import cssnano from "cssnano";
 import { parse, parseFragment } from "parse5";

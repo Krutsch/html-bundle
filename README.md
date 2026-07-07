@@ -46,9 +46,10 @@ $ npm run build
 ## CLI
 
 `--hmr`: boots up a static server and enables Hot Module Replacement. See [HMR](#hmr) for what is hot-patched in place versus reloaded.<br>
-`--secure`: creates a secure HTTP2 over HTTPS instance. This requires the files `localhost.pem` and `localhost-key.pem` in the root folder. You can generate them with [mkcert](https://github.com/FiloSottile/mkcert) for instance.<br>
+`--secure`: creates a secure HTTP2 over HTTPS instance. Plain HTTP requests to the same host and port redirect to HTTPS. This requires the files `localhost.pem` and `localhost-key.pem` in the root folder. You can generate them with [mkcert](https://github.com/FiloSottile/mkcert) for instance.<br>
 `--isCritical`: uses critical to extract and inline critical-path CSS to HTML.<br>
-`--handler`: path to your custom handler. Here, you can handle all non-supported files. You can get the filename via `process.argv[2]`.
+`--handler`: path to your custom handler. Here, you can handle all non-supported files. You can get the filename via `process.argv[2]`.<br>
+`--handlerConcurrency`: maximum number of handler processes running at once. Defaults to the available CPU count. For image-heavy handlers such as Sharp resizing, try 2, 4, 8, and the default value, then keep the fastest value that does not spike memory.
 
 ## HMR
 
@@ -112,6 +113,7 @@ Example:
 export default {
   secure: true,
   handler: "utils/staticFiles.js",
+  handlerConcurrency: 4,
   esbuild: {
     external: ["images"],
   },

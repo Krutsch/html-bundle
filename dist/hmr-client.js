@@ -75,39 +75,55 @@ function patch(message) {
         }
     }
     else {
-        patchFragment(message.html);
+        patchFragment(message);
     }
     window.scrollTo(0, previousScroll);
 }
-function patchFragment(htmlText) {
-    const incoming = parseHTML(htmlText);
+function patchFragment(message) {
+    const incoming = parseHTML(message.html);
     // hydro-js returns a DocumentFragment for multi-root markup but the element
     // itself for a single root — normalise to a flat list of top-level nodes.
-    const nextNodes = incoming.nodeType === Node.DOCUMENT_FRAGMENT_NODE ||
-        incoming.nodeType === Node.DOCUMENT_NODE
-        ? Array.from(incoming.childNodes)
-        : [incoming];
+    const nextNodes = topLevelNodes(incoming);
     const regions = Array.from(document.querySelectorAll(REGION));
+    if (!regions.length) {
+        hub.lastHTML.set(FILE, message.html);
+        return;
+    }
+    const previousText = message.previousHtml || hub.lastHTML.get(FILE);
+    const previousNodes = previousText
+        ? topLevelNodes(parseHTML(previousText))
+        : [];
     // Replace each existing region in place, drop the surplus, append the rest.
     regions.forEach((where, index) => {
         if (index < nextNodes.length) {
-            render(nextNodes[index], where, false);
+            const previousNode = previousNodes[index];
+            const nextNode = nextNodes[index];
+            if (previousNode && sameNodeIdentity(previousNode, nextNode)) {
+                patchNode(previousNode, nextNode, where);
+            }
+            else {
+                render(cloneForRender(nextNode), where, false);
+            }
         }
         else {
             where.remove();
         }
     });
     for (let rest = regions.length; rest < nextNodes.length; rest++) {
-        if (regions.length) {
-            const template = document.createElement("template");
-            nextNodes[regions.length - 1].after(template);
-            render(nextNodes[rest], template, false);
-            template.remove();
-        }
-        else {
-            render(nextNodes[rest], false, false);
-        }
+        const template = document.createElement("template");
+        const regionList = Array.from(document.querySelectorAll(REGION));
+        const lastRegion = regionList[regionList.length - 1];
+        lastRegion.after(template);
+        render(cloneForRender(nextNodes[rest]), template, false);
+        template.remove();
     }
+    hub.lastHTML.set(FILE, message.html);
+}
+function topLevelNodes(parsed) {
+    return parsed.nodeType === Node.DOCUMENT_FRAGMENT_NODE ||
+        parsed.nodeType === Node.DOCUMENT_NODE
+        ? Array.from(parsed.childNodes)
+        : [parsed];
 }
 function isFullDocument(htmlText) {
     const trimmed = htmlText.trimStart().toLowerCase();

@@ -1,6 +1,6 @@
 {
   "name": "html-bundle",
-  "version": "6.4.1",
+  "version": "6.5.0",
   "description": "A very simple bundler for HTML SFC",
   "bin": "./dist/bundle.mjs",
   "main": "./dist/bundle.mjs",
@@ -50,8 +50,10 @@
     "express": "^5.2.1",
     "glob": "^13.0.6",
     "html-minifier-terser": "^7.2.0",
+    "httpolyglot": "^0.1.2",
     "hydro-js": "^1.9.0",
     "jiti": "^2.7.0",
+    "p-limit": "^7.3.0",
     "parse5": "^8.0.1",
     "postcss": "^8.5.16",
     "postcss-load-config": "^6.0.1"

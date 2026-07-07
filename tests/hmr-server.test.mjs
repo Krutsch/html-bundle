@@ -3,15 +3,19 @@
 // normalised events the client depends on.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import http from "node:http";
+import https from "node:https";
 import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 
 const repoRoot = path.resolve(new URL("..", import.meta.url).pathname);
 const bundlePath = path.join(repoRoot, "dist", "bundle.mjs");
 const PORT = 5323;
+const SECURE_PORT = 5324;
+const execFilePromise = promisify(execFile);
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -83,6 +87,112 @@ async function until(predicate, ms = 6000) {
   }
   return undefined;
 }
+
+async function writeLocalhostCertificate(cwd, t) {
+  try {
+    await execFilePromise("openssl", [
+      "req",
+      "-x509",
+      "-newkey",
+      "rsa:2048",
+      "-nodes",
+      "-keyout",
+      path.join(cwd, "localhost-key.pem"),
+      "-out",
+      path.join(cwd, "localhost.pem"),
+      "-subj",
+      "/CN=localhost",
+      "-days",
+      "1",
+      "-addext",
+      "subjectAltName=DNS:localhost,IP:127.0.0.1",
+    ]);
+    return true;
+  } catch {
+    t.skip("openssl is required to generate the HTTPS test certificate");
+    return false;
+  }
+}
+
+async function requestHttpRedirect(pathname) {
+  let lastError;
+  for (let attempt = 0; attempt < 40; attempt++) {
+    try {
+      return await new Promise((resolve, reject) => {
+        const req = http.get(
+          `http://127.0.0.1:${SECURE_PORT}${pathname}`,
+          (res) => {
+            res.resume();
+            resolve({
+              statusCode: res.statusCode,
+              location: res.headers.location,
+            });
+          },
+        );
+        req.on("error", reject);
+      });
+    } catch (error) {
+      lastError = error;
+      await wait(100);
+    }
+  }
+  throw lastError;
+}
+
+function requestHttps(pathname) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(
+      {
+        hostname: "127.0.0.1",
+        port: SECURE_PORT,
+        path: pathname,
+        rejectUnauthorized: false,
+      },
+      (res) => {
+        res.setEncoding("utf8");
+        let body = "";
+        res.on("data", (chunk) => (body += chunk));
+        res.on("end", () => resolve({ statusCode: res.statusCode, body }));
+      },
+    );
+    req.on("error", reject);
+  });
+}
+
+test("secure HMR server redirects plain HTTP on the same port", async (t) => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "html-bundle-secure-hmr-"));
+  t.after(() => rm(cwd, { force: true, recursive: true }));
+  await mkdir(path.join(cwd, "src"), { recursive: true });
+  if (!(await writeLocalhostCertificate(cwd, t))) return;
+
+  await writeFile(
+    path.join(cwd, "bundle.config.js"),
+    `export default { port: ${SECURE_PORT}, host: "127.0.0.1", deletePrev: true };\n`,
+  );
+  await writeFile(
+    path.join(cwd, "src", "index.html"),
+    `<!DOCTYPE html><html><head><title>Secure fixture</title></head><body><main>Secure fixture</main></body></html>`,
+  );
+
+  const server = spawn(process.execPath, [bundlePath, "--hmr", "--secure"], {
+    cwd,
+  });
+  t.after(() => server.kill("SIGKILL"));
+  server.stderr.on("data", () => {});
+
+  await waitForListening(server);
+
+  const redirect = await requestHttpRedirect("/quickstart/checkbox");
+  assert.equal(redirect.statusCode, 307);
+  assert.equal(
+    redirect.location,
+    `https://127.0.0.1:${SECURE_PORT}/quickstart/checkbox`,
+  );
+
+  const app = await requestHttps("/");
+  assert.equal(app.statusCode, 200);
+  assert.match(app.body, /Secure fixture/);
+});
 
 test("HMR server emits typed events and funnels module edits to owning pages", async (t) => {
   const cwd = await mkdtemp(path.join(tmpdir(), "html-bundle-hmr-"));

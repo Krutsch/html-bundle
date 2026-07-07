@@ -4,8 +4,9 @@ import type { Router } from "express-serve-static-core";
 import { copyFile, mkdir, readFile } from "fs/promises";
 import path from "path";
 import http, { type Server } from "http";
-import https, { type Server as HTTPSServer } from "https";
+import type { Server as HTTPSServer } from "https";
 import express from "express";
+import httpolyglot from "httpolyglot";
 import postcssrc from "postcss-load-config";
 import cssnano from "cssnano";
 import { parse, parseFragment, serialize } from "parse5";
@@ -57,6 +58,20 @@ export async function createDefaultServer(
 ): Promise<[Router, Server | HTTPSServer]> {
   const router = express.Router();
   const app = express();
+
+  if (isSecure) {
+    app.use((req, res, next) => {
+      const socket = req.socket as typeof req.socket & { encrypted?: boolean };
+      if (socket.encrypted) {
+        next();
+        return;
+      }
+
+      const host = req.headers.host || getDefaultHost();
+      res.redirect(307, `https://${host}${req.originalUrl || req.url}`);
+    });
+  }
+
   app.use(router);
   app.use(express.static(path.join(process.cwd(), bundleConfig.build)));
 
@@ -94,22 +109,28 @@ export async function createDefaultServer(
     res.send(file);
   });
 
+  const secureOptions = isSecure
+    ? {
+        key:
+          bundleConfig.key ||
+          (await readFile(path.join(process.cwd(), "localhost-key.pem"))),
+        cert:
+          bundleConfig.cert ||
+          (await readFile(path.join(process.cwd(), "localhost.pem"))),
+      }
+    : undefined;
+
   return [
     router,
     isSecure
-      ? https.createServer(
-          {
-            key:
-              bundleConfig.key ||
-              (await readFile(path.join(process.cwd(), "localhost-key.pem"))),
-            cert:
-              bundleConfig.cert ||
-              (await readFile(path.join(process.cwd(), "localhost.pem"))),
-          },
-          app,
-        )
+      ? httpolyglot.createServer(secureOptions!, app)
       : http.createServer({}, app),
   ];
+}
+
+function getDefaultHost() {
+  const host = bundleConfig.host === "::" ? "localhost" : bundleConfig.host;
+  return `${host}:${bundleConfig.port}`;
 }
 
 export async function getPostCSSConfig() {
@@ -175,8 +196,7 @@ export function addHMRCode(
   if (html.includes("<!DOCTYPE html>") || html.includes("<html")) {
     DOM = ast || parse(html);
     const headNode = findElement(DOM as Node, (e) => getTagName(e) === "head");
-    // Inject first in <head> so the client runs before the page's own scripts.
-    prependChild(headNode as Node, script);
+    insertHeadClient(headNode as Node, script);
   } else {
     DOM = ast || parseFragment(html);
     prependChild(DOM as Node, script);
@@ -211,4 +231,14 @@ function prependChild(parent: Node, node: unknown) {
   // initial load.
   (node as { parentNode?: unknown }).parentNode = parent;
   (parent as unknown as { childNodes: unknown[] }).childNodes.unshift(node);
+}
+
+function insertHeadClient(parent: Node, node: unknown) {
+  const children = (parent as unknown as { childNodes: Node[] }).childNodes;
+  const lastBaseIndex = children.findLastIndex(
+    (child) => getTagName(child) === "base",
+  );
+
+  (node as { parentNode?: unknown }).parentNode = parent;
+  children.splice(lastBaseIndex + 1, 0, node as Node);
 }

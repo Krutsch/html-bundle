@@ -1,8 +1,8 @@
 import { copyFile, mkdir, readFile } from "fs/promises";
 import path from "path";
 import http from "http";
-import https from "https";
 import express from "express";
+import httpolyglot from "httpolyglot";
 import postcssrc from "postcss-load-config";
 import cssnano from "cssnano";
 import { parse, parseFragment, serialize } from "parse5";
@@ -35,6 +35,17 @@ export let serverSentEvents;
 export async function createDefaultServer(isSecure) {
     const router = express.Router();
     const app = express();
+    if (isSecure) {
+        app.use((req, res, next) => {
+            const socket = req.socket;
+            if (socket.encrypted) {
+                next();
+                return;
+            }
+            const host = req.headers.host || getDefaultHost();
+            res.redirect(307, `https://${host}${req.originalUrl || req.url}`);
+        });
+    }
     app.use(router);
     app.use(express.static(path.join(process.cwd(), bundleConfig.build)));
     router.get("/hmr", (req, reply) => {
@@ -63,17 +74,24 @@ export async function createDefaultServer(isSecure) {
         });
         res.send(file);
     });
+    const secureOptions = isSecure
+        ? {
+            key: bundleConfig.key ||
+                (await readFile(path.join(process.cwd(), "localhost-key.pem"))),
+            cert: bundleConfig.cert ||
+                (await readFile(path.join(process.cwd(), "localhost.pem"))),
+        }
+        : undefined;
     return [
         router,
         isSecure
-            ? https.createServer({
-                key: bundleConfig.key ||
-                    (await readFile(path.join(process.cwd(), "localhost-key.pem"))),
-                cert: bundleConfig.cert ||
-                    (await readFile(path.join(process.cwd(), "localhost.pem"))),
-            }, app)
+            ? httpolyglot.createServer(secureOptions, app)
             : http.createServer({}, app),
     ];
+}
+function getDefaultHost() {
+    const host = bundleConfig.host === "::" ? "localhost" : bundleConfig.host;
+    return `${host}:${bundleConfig.port}`;
 }
 export async function getPostCSSConfig() {
     try {
@@ -126,8 +144,7 @@ export function addHMRCode(html, file, ast) {
     if (html.includes("<!DOCTYPE html>") || html.includes("<html")) {
         DOM = ast || parse(html);
         const headNode = findElement(DOM, (e) => getTagName(e) === "head");
-        // Inject first in <head> so the client runs before the page's own scripts.
-        prependChild(headNode, script);
+        insertHeadClient(headNode, script);
     }
     else {
         DOM = ast || parseFragment(html);
@@ -156,4 +173,10 @@ function prependChild(parent, node) {
     // initial load.
     node.parentNode = parent;
     parent.childNodes.unshift(node);
+}
+function insertHeadClient(parent, node) {
+    const children = parent.childNodes;
+    const lastBaseIndex = children.findLastIndex((child) => getTagName(child) === "base");
+    node.parentNode = parent;
+    children.splice(lastBaseIndex + 1, 0, node);
 }

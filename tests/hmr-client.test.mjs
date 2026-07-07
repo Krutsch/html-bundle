@@ -195,6 +195,81 @@ test("single-root fragment update patches only its own region", async () => {
   assert.equal(region.textContent, "New");
 });
 
+test("inactive fragment update does not append into the current document", async () => {
+  const { document, loadPage } = await setup();
+  document.body.innerHTML =
+    "<main><section id='active-route'>Checkbox route</section></main>";
+
+  loadPage("src/ssr.html", "ssr1");
+  window.__htmlBundleHMR.dispatch({
+    type: "html",
+    file: "src/ssr.html",
+    html: "<h1 data-hmr='ssr1'>Server-Side Rendering</h1><p data-hmr='ssr1'>SSR copy</p>",
+  });
+
+  assert.equal(document.querySelector('[data-hmr="ssr1"]'), null);
+  assert.equal(
+    document.body.textContent.includes("Server-Side Rendering"),
+    false,
+  );
+  assert.equal(
+    document.querySelector("#active-route")?.textContent,
+    "Checkbox route",
+  );
+});
+
+test("parent fragment update preserves a mounted child outlet", async () => {
+  const { document, loadPage } = await setup();
+  const previousHtml =
+    "<div data-hmr='doc1' class='layout'><aside>Old nav</aside><div data-outlet><h1>Getting started</h1><p>Parent default</p></div></div>";
+  const nextHtml =
+    "<div data-hmr='doc1' class='layout updated'><aside>New nav</aside><div data-outlet><h1>Getting started</h1><p>Parent default</p></div></div>";
+  document.body.innerHTML =
+    "<main><div data-hmr='doc1' class='layout'><aside>Old nav</aside><div data-outlet><h1 id='checkbox-route'>Checkbox route</h1><p>Child content</p></div></div></main>";
+
+  loadPage("src/documentation.html", "doc1");
+  window.__htmlBundleHMR.dispatch({
+    type: "html",
+    file: "src/documentation.html",
+    previousHtml,
+    html: nextHtml,
+  });
+
+  const region = document.querySelector('[data-hmr="doc1"]');
+  assert.match(region.className, /updated/);
+  assert.equal(region.querySelector("aside")?.textContent, "New nav");
+  assert.equal(
+    region.querySelector("#checkbox-route")?.textContent,
+    "Checkbox route",
+  );
+  assert.equal(
+    region
+      .querySelector("[data-outlet]")
+      ?.textContent.includes("Parent default"),
+    false,
+  );
+});
+
+test("fragment accept callback runs after a direct fragment patch", async () => {
+  const { document, loadPage } = await setup();
+  document.body.innerHTML = "<div data-hmr='app1'>Old</div>";
+  loadPage("src/app/index.html", "app1");
+
+  let accepted = false;
+  window.htmlBundleHMR.accept(() => {
+    accepted = true;
+  });
+
+  window.__htmlBundleHMR.dispatch({
+    type: "html",
+    file: "src/app/index.html",
+    html: "<div data-hmr='app1'>New</div>",
+  });
+
+  assert.equal(document.querySelector('[data-hmr="app1"]')?.textContent, "New");
+  assert.equal(accepted, true);
+});
+
 test("dispose runs before re-patch and data persists across updates", async () => {
   const { document, loadPage } = await setup();
   document.body.innerHTML = "<div data-hmr='app1'>Old</div>";

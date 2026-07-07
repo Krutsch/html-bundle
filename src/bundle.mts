@@ -8,10 +8,12 @@ import { readFile, rm, writeFile, readdir, lstat } from "fs/promises";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { sep } from "path";
+import { availableParallelism } from "os";
 import { glob } from "glob";
 import postcss from "postcss";
 import express from "express";
 import esbuild, { type BuildOptions } from "esbuild";
+import pLimit from "p-limit";
 import Beasties, { type Options } from "beasties";
 import { minify, type Options as MinifyOptions } from "html-minifier-terser";
 import { watch } from "chokidar";
@@ -41,6 +43,9 @@ const isSecure = process.argv.includes("--secure") || bundleConfig.secure; // us
 const handlerFile = process.argv.includes("--handler")
   ? process.argv[process.argv.indexOf("--handler") + 1]
   : bundleConfig.handler;
+const defaultHandlerConcurrency = availableParallelism();
+const handlerConcurrency = getHandlerConcurrency();
+const limitHandler = pLimit(handlerConcurrency);
 
 process.env.NODE_ENV = isHMR ? "development" : "production"; // just in case other tools are using it
 let timer = performance.now();
@@ -66,6 +71,8 @@ async function cleanupStaleInlineBundleFiles() {
 }
 
 async function build(files: string[], firstRun = true) {
+  const handlerTasks: Promise<void>[] = [];
+
   for (const file of files) {
     if (INLINE_BUNDLE_FILE.test(file)) {
       continue;
@@ -74,12 +81,11 @@ async function build(files: string[], firstRun = true) {
     await createDir(file);
 
     if (!SUPPORTED_FILES.test(file)) {
+      if ((await lstat(file)).isDirectory()) continue;
+
       if (handlerFile) {
-        execFilePromise("node", [handlerFile, file]).then(({ stdout }) => {
-          console.log("📋 Logging Handler: ", String(stdout));
-        });
+        handlerTasks.push(limitHandler(() => runHandler(file)));
       } else {
-        if ((await lstat(file)).isDirectory()) continue;
         await fileCopy(file);
       }
     } else {
@@ -104,6 +110,7 @@ async function build(files: string[], firstRun = true) {
       await minifyHTML(file, getBuildPath(file));
     }
   }
+  await Promise.all(handlerTasks);
 
   console.log(
     `🚀 Build finished in ${(performance.now() - timer).toFixed(2)}ms ✨`,
@@ -262,11 +269,7 @@ async function build(files: string[], firstRun = true) {
       } else {
         if (handlerFile) {
           try {
-            const { stdout } = await execFilePromise("node", [
-              handlerFile,
-              file,
-            ]);
-            console.log("📋 Logging Handler: ", String(stdout));
+            await limitHandler(() => runHandler(file));
           } catch (err) {
             console.error(err);
           }
@@ -277,6 +280,35 @@ async function build(files: string[], firstRun = true) {
       }
     }
   }
+}
+
+function getHandlerConcurrency() {
+  const value =
+    getArgValue("--handlerConcurrency") ??
+    getArgValue("--maxHandlerConcurrency") ??
+    bundleConfig.handlerConcurrency ??
+    bundleConfig.maxHandlerConcurrency ??
+    defaultHandlerConcurrency;
+  const parsed = Number(value);
+
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    return defaultHandlerConcurrency;
+  }
+
+  return parsed;
+}
+
+function getArgValue(name: string) {
+  const index = process.argv.indexOf(name);
+  return index === -1 ? undefined : process.argv[index + 1];
+}
+
+async function runHandler(file: string) {
+  if (!handlerFile) return;
+
+  const { stdout } = await execFilePromise("node", [handlerFile, file]);
+  const output = String(stdout).trim();
+  if (output) console.log("📋 Logging Handler: ", output);
 }
 
 async function minifyCSS(file: string, buildFile: string) {
@@ -521,6 +553,8 @@ export type Config = {
   isCritical?: boolean;
   hmr?: boolean;
   handler?: string;
+  handlerConcurrency?: number;
+  maxHandlerConcurrency?: number;
   host?: string;
   key?: Buffer;
   cert?: Buffer;

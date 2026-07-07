@@ -133,6 +133,18 @@ test("addHMRCode injects fragment client before fragment scripts", async () => {
   );
 });
 
+test("addHMRCode injects full-document client after base and before scripts", async () => {
+  const { addHMRCode } = await import(pathToFileURL(utilsPath).href);
+
+  const html = addHMRCode(
+    '<!DOCTYPE html><html><head><base href="/"><script type="module">window.started = true;</script></head><body><main>Hi</main></body></html>',
+    "src/index.html",
+  );
+
+  assert.ok(html.indexOf('<base href="/">') < html.indexOf("data-hmr-client"));
+  assert.ok(html.indexOf("data-hmr-client") < html.indexOf("window.started"));
+});
+
 test("HMR full-document detection survives template-literal escaping", async () => {
   const { addHMRCode } = await import(pathToFileURL(utilsPath).href);
 
@@ -275,4 +287,111 @@ test("CLI honors a custom bundle.config.js src and build directories", async (t)
     readFile(path.join(cwd, "build", "index.html"), "utf8"),
     { code: "ENOENT" },
   );
+});
+
+test("CLI removes development-only process.env.NODE_ENV branches in production", async (t) => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "html-bundle-"));
+  t.after(() => rm(cwd, { force: true, recursive: true }));
+
+  await mkdir(path.join(cwd, "src"), { recursive: true });
+  await writeFile(
+    path.join(cwd, "src", "index.html"),
+    `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Fixture</title>
+    <script type="module">
+      if (process.env.NODE_ENV !== "production") {
+        window.__devOnly = "dev-only-hmr-hook";
+      }
+      window.__env = process.env.NODE_ENV;
+    </script>
+  </head>
+  <body><main>Hi</main></body>
+</html>`,
+  );
+
+  await execFilePromise(process.execPath, [bundlePath], { cwd });
+
+  const html = await readFile(path.join(cwd, "build", "index.html"), "utf8");
+  assert.doesNotMatch(html, /dev-only-hmr-hook/);
+  assert.doesNotMatch(html, /__devOnly/);
+  assert.match(html, /production/);
+});
+
+test("CLI limits concurrent handler processes and waits for them", async (t) => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "html-bundle-"));
+  t.after(() => rm(cwd, { force: true, recursive: true }));
+
+  await mkdir(path.join(cwd, "src", "assets"), { recursive: true });
+  await writeFile(
+    path.join(cwd, "src", "index.html"),
+    `<!DOCTYPE html><html lang="en"><head><title>Fixture</title></head><body><main>Hi</main></body></html>`,
+  );
+
+  for (let index = 0; index < 5; index++) {
+    await writeFile(
+      path.join(cwd, "src", "assets", `image-${index}.raw`),
+      `image ${index}`,
+    );
+  }
+
+  await writeFile(
+    path.join(cwd, "handler.mjs"),
+    `import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+
+const file = process.argv[2];
+const name = path.basename(file);
+const start = Date.now();
+await new Promise((resolve) => setTimeout(resolve, 120));
+const end = Date.now();
+
+await mkdir(path.join(process.cwd(), "build", "assets"), { recursive: true });
+await writeFile(
+  path.join(process.cwd(), "build", "assets", name),
+  await readFile(file),
+);
+await writeFile(
+  path.join(process.cwd(), "build", name + ".json"),
+  JSON.stringify({ name, start, end }),
+);
+`,
+  );
+
+  await execFilePromise(
+    process.execPath,
+    [bundlePath, "--handler", "handler.mjs", "--handlerConcurrency", "2"],
+    { cwd },
+  );
+
+  const records = [];
+  for (let index = 0; index < 5; index++) {
+    const name = `image-${index}.raw`;
+    const output = await readFile(
+      path.join(cwd, "build", "assets", name),
+      "utf8",
+    );
+    records.push(
+      JSON.parse(
+        await readFile(path.join(cwd, "build", name + ".json"), "utf8"),
+      ),
+    );
+    assert.equal(output, `image ${index}`);
+  }
+
+  const events = records
+    .flatMap(({ start, end }) => [
+      { time: start, delta: 1 },
+      { time: end, delta: -1 },
+    ])
+    .sort((a, b) => a.time - b.time || a.delta - b.delta);
+  let active = 0;
+  let maxActive = 0;
+  for (const event of events) {
+    active += event.delta;
+    maxActive = Math.max(maxActive, active);
+  }
+
+  assert.ok(maxActive <= 2, `expected max concurrency <= 2, got ${maxActive}`);
 });
