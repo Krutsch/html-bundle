@@ -89,23 +89,75 @@ test("addHMRCode injects stable HMR wiring", async () => {
   );
   const fragment = addHMRCode("<main>Hi</main>", "src/fragment.html");
 
-  assert.match(fullDocument, /<script type="module">/);
+  assert.match(fullDocument, /<script type="module" data-hmr-client="[^\"]+">/);
   assert.match(fullDocument, /new EventSource\("\/hmr"\)/);
-  assert.match(
-    fullDocument,
-    /window\.htmlBundleHMRConnections \|\|= new Map\(\)/,
-  );
-  assert.match(fullDocument, /window\.addEventListener\("pagehide"/);
-  assert.match(fullDocument, /eventSource\.close\(\)/);
+  // Single shared hub + public opt-in API replace the old per-page globals.
+  assert.match(fullDocument, /window\.__htmlBundleHMR/);
+  assert.match(fullDocument, /window\.htmlBundleHMR = \{/);
+  assert.match(fullDocument, /hub\.register\(FILE, ID/);
+  assert.match(fullDocument, /"pagehide"/);
+  assert.match(fullDocument, /\.close\(\)/);
   assert.match(fullDocument, /data-hmr="[^"]+"/);
+  assert.match(fullDocument, /function patchDocument\(/);
+  assert.match(fullDocument, /function patchScript\(/);
+  // Single-root fragments must be normalised (hydro-js returns the element, not
+  // a DocumentFragment) so patching targets the right nodes.
+  assert.match(fullDocument, /Node\.DOCUMENT_FRAGMENT_NODE/);
+  // tsc formats the tagged template with a space (`html `...``), so allow it.
+  assert.match(fullDocument, /html\s*`\$\{htmlText\}`/);
+  assert.doesNotMatch(fullDocument, /document\.head\.remove\(\)/);
+  assert.doesNotMatch(fullDocument, /DOMParser/);
+  // The client is injected first in <head> so it runs before the page's own
+  // scripts (needed for window.htmlBundleHMR.dispose()/data on initial load).
   assert.ok(
     fullDocument.indexOf("<head>") <
-      fullDocument.indexOf('<script type="module">'),
+      fullDocument.indexOf('<script type="module" data-hmr-client='),
   );
 
-  assert.match(fragment, /^<main data-hmr="[^"]+">Hi<\/main>/);
+  assert.match(fragment, /<main data-hmr="[^"]+">Hi<\/main>/);
   assert.match(fragment, /new EventSource\("\/hmr"\)/);
-  assert.match(fragment, /window\.htmlBundleHMRActiveId ===/);
+  assert.match(fragment, /hub\.register\(FILE, ID/);
+});
+
+test("addHMRCode injects fragment client before fragment scripts", async () => {
+  const { addHMRCode } = await import(pathToFileURL(utilsPath).href);
+
+  const fragment = addHMRCode(
+    '<script type="module">window.htmlBundleHMR.dispose(() => {});</script><main>Hi</main>',
+    "src/scripted-fragment.html",
+  );
+
+  assert.ok(
+    fragment.indexOf("data-hmr-client") <
+      fragment.indexOf("window.htmlBundleHMR.dispose"),
+  );
+});
+
+test("HMR full-document detection survives template-literal escaping", async () => {
+  const { addHMRCode } = await import(pathToFileURL(utilsPath).href);
+
+  const doc = addHMRCode(
+    "<!DOCTYPE html><html><head></head><body>x</body></html>",
+    "src/detect.html",
+  );
+  const code = doc.match(/data-hmr-client="[^"]+">([\s\S]*?)<\/script>/)[1];
+  const start = code.indexOf("function isFullDocument");
+  const end = code.indexOf("function parseHTML");
+  const fnText = code.slice(start, end);
+  const isFullDocument = new Function(`${fnText}\n return isFullDocument;`)();
+
+  // Real payloads emitted by the server (parse5 + html-minifier-terser).
+  assert.equal(
+    isFullDocument("<!DOCTYPE html><html><body></body></html>"),
+    true,
+  );
+  assert.equal(
+    isFullDocument("<!doctype html><html><body></body></html>"),
+    true,
+  );
+  assert.equal(isFullDocument('<html lang="en"><body></body></html>'), true);
+  // Fragments must still take the fragment path.
+  assert.equal(isFullDocument("<main>fragment</main>"), false);
 });
 
 test("getBuildPath maps src paths into the build directory", async () => {

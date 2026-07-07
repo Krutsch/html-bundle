@@ -122,6 +122,13 @@ async function build(files: string[], firstRun = true) {
     console.log(`⌛ Waiting for file changes ...`);
 
     const chokidarOptions = { awaitWriteFinish: false };
+    let rebuildQueue = Promise.resolve();
+    const enqueueRebuild = (file: string) => {
+      rebuildQueue = rebuildQueue
+        .catch(() => undefined)
+        .then(() => rebuild(file));
+      return rebuildQueue;
+    };
     if (postcssFile) {
       const postCSSWatcher = watch(postcssFile, chokidarOptions);
       const tailwindCSSWatcher = watch(
@@ -156,7 +163,8 @@ async function build(files: string[], firstRun = true) {
       }
 
       try {
-        await rebuild(file);
+        files.push(file);
+        await enqueueRebuild(file);
       } catch {}
 
       console.log(`⚡ added ${file} to the build`);
@@ -167,7 +175,7 @@ async function build(files: string[], firstRun = true) {
       }
       file = String.raw`${file}`.replace(/\\/g, "/");
 
-      await rebuild(file);
+      await enqueueRebuild(file);
 
       console.log(`⚡ modified ${file} on the build`);
     });
@@ -177,6 +185,8 @@ async function build(files: string[], firstRun = true) {
       }
       file = String.raw`${file}`.replace(/\\/g, "/");
 
+      const fileIndex = files.indexOf(file);
+      if (fileIndex !== -1) files.splice(fileIndex, 1);
       inlineFiles.delete(file);
       const buildFile = getBuildPath(file)
         .replace(".ts", ".js")
@@ -189,45 +199,82 @@ async function build(files: string[], firstRun = true) {
         if (!stats.length) await rm(bfDir);
       } catch {}
 
+      serverSentEvents?.({ type: "full-reload", file });
+
       console.log(`⚡ deleted ${file} from the build`);
     });
 
     async function rebuild(file: string) {
       // Rebuild all CSS because a change in any file might need to trigger PostCSS zu rebuild(e.g. Tailwind CSS)
       await rebuildCSS(files.filter((file) => file.endsWith(".css")));
+      const htmlFiles = files.filter((f) => f.endsWith(".html"));
 
-      let html;
       if (file.endsWith(".html")) {
+        const previousHtml = builtHTMLCache.get(file);
         // To refill the inlineFiles needed to build JS
-        for (const htmlFile of files.filter((file) => file.endsWith(".html"))) {
+        for (const htmlFile of htmlFiles) {
           await writeInlineScripts(htmlFile);
         }
         await minifyCode();
-        for (const file of inlineFiles) {
-          if (INLINE_BUNDLE_FILE.test(file)) {
-            inlineFiles.delete(file);
-            await rm(file);
+        for (const inline of inlineFiles) {
+          if (INLINE_BUNDLE_FILE.test(inline)) {
+            inlineFiles.delete(inline);
+            await rm(inline);
           }
         }
-        html = await minifyHTML(file, getBuildPath(file));
+        const html = await minifyHTML(file, getBuildPath(file));
+        serverSentEvents?.({ type: "html", file, html, previousHtml });
       } else if (/\.(jsx?|tsx?)$/.test(file)) {
+        // A module change alters the inlined output of whichever page(s) import
+        // it. Rebuild every page, then emit only the pages whose HTML actually
+        // changed; the client diff re-runs just the scripts that differ, so
+        // unrelated pages keep their state.
         inlineFiles.add(file);
+        for (const htmlFile of htmlFiles) {
+          await writeInlineScripts(htmlFile);
+        }
         await minifyCode();
-      } else if (!file.endsWith(".css")) {
+        for (const inline of inlineFiles) {
+          if (INLINE_BUNDLE_FILE.test(inline)) {
+            inlineFiles.delete(inline);
+            await rm(inline);
+          }
+        }
+        let didEmit = false;
+        for (const htmlFile of htmlFiles) {
+          const previousHtml = builtHTMLCache.get(htmlFile);
+          const html = await minifyHTML(htmlFile, getBuildPath(htmlFile));
+          if (html !== previousHtml) {
+            didEmit = true;
+            serverSentEvents?.({
+              type: "html",
+              file: htmlFile,
+              html,
+              previousHtml,
+            });
+          }
+        }
+        if (!didEmit) {
+          serverSentEvents?.({ type: "full-reload", file });
+        }
+      } else if (file.endsWith(".css")) {
+        serverSentEvents?.({ type: "css", file });
+      } else {
         if (handlerFile) {
-          execFilePromise("node", [handlerFile, file]).then(({ stdout }) => {
+          try {
+            const { stdout } = await execFilePromise("node", [
+              handlerFile,
+              file,
+            ]);
             console.log("📋 Logging Handler: ", String(stdout));
-          });
+          } catch (err) {
+            console.error(err);
+          }
         } else {
           await fileCopy(file);
         }
-      } else if (handlerFile) {
-        execFilePromise("node", [handlerFile, file]).then(({ stdout }) => {
-          console.log("📋 Logging Handler: ", String(stdout));
-        });
+        serverSentEvents?.({ type: "asset", file });
       }
-
-      serverSentEvents?.({ file, html });
     }
   }
 }
@@ -297,6 +344,7 @@ async function minifyCode(): Promise<unknown> {
 }
 
 const htmlFilesCache = new Map();
+const builtHTMLCache = new Map<string, string>();
 async function writeInlineScripts(file: string) {
   let fileText = await readFile(file, { encoding: "utf-8" });
 
@@ -430,6 +478,7 @@ async function minifyHTML(file: string, buildFile: string) {
   }
 
   await writeFile(buildFile, fileText);
+  builtHTMLCache.set(file, fileText);
   return fileText;
 }
 

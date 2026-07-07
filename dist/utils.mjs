@@ -6,8 +6,19 @@ import express from "express";
 import postcssrc from "postcss-load-config";
 import cssnano from "cssnano";
 import { parse, parseFragment, serialize } from "parse5";
-import { createScript, getTagName, findElement, appendChild, } from "@web/parse5-utils";
+import { createScript, getTagName, findElement } from "@web/parse5-utils";
 export const bundleConfig = await getBundleConfig();
+// The HMR client runtime is authored in src/hmr-client.ts and compiled by tsc to
+// dist/hmr-client.js alongside this module (a real file, so its code is never
+// mangled by template-literal escaping). Read it once and substitute the per-page
+// tokens on demand in buildHMRClient().
+let hmrClientTemplate = "";
+try {
+    hmrClientTemplate = await readFile(new URL("./hmr-client.js", import.meta.url), "utf-8");
+}
+catch {
+    // Only needed when --hmr is active; addHMRCode tolerates an empty template.
+}
 export function fileCopy(file) {
     return copyFile(file, getBuildPath(file));
 }
@@ -35,16 +46,13 @@ export async function createDefaultServer(isSecure) {
         req.on("close", () => {
             CONNECTIONS.delete(reply);
         });
-        serverSentEvents = (data) => {
-            if (/\.(jsx?|tsx?)$/.test(data.file)) {
-                data.file = data.file.replace(".ts", ".js").replace(".jsx", ".js");
-            }
+        serverSentEvents = (event) => {
             CONNECTIONS.forEach((rep) => {
                 if (rep.destroyed || rep.writableEnded) {
                     CONNECTIONS.delete(rep);
                     return;
                 }
-                rep.write(`data: ${JSON.stringify(data)}\n\n`);
+                rep.write(`data: ${JSON.stringify(event)}\n\n`);
             });
         };
     });
@@ -71,7 +79,15 @@ export async function getPostCSSConfig() {
     try {
         return await postcssrc({});
     }
-    catch {
+    catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        // postcssrc throws "No PostCSS Config found" when the project is zero-config;
+        // that is expected, so stay silent. Any other failure (e.g. a broken config
+        // or a TypeScript config that cannot be loaded) would otherwise silently
+        // degrade the build to cssnano-only, so surface it.
+        if (!/No PostCSS Config found/i.test(message)) {
+            console.error(`\u26A0\uFE0F  Could not load your PostCSS config \u2013 falling back to cssnano only. ${message}`);
+        }
         return { plugins: [cssnano], options: {}, file: "" };
     }
 }
@@ -104,189 +120,40 @@ export function addHMRCode(html, file, ast) {
     if (!htmlIdMap.has(file)) {
         htmlIdMap.set(file, randomText());
     }
-    const script = createScript({ type: "module" }, getHMRCode(file, htmlIdMap.get(file), bundleConfig.src));
+    const id = htmlIdMap.get(file);
+    const script = createScript({ type: "module", "data-hmr-client": id }, buildHMRClient(file, id, bundleConfig.src));
     let DOM;
     if (html.includes("<!DOCTYPE html>") || html.includes("<html")) {
         DOM = ast || parse(html);
         const headNode = findElement(DOM, (e) => getTagName(e) === "head");
-        appendChild(headNode, script);
+        // Inject first in <head> so the client runs before the page's own scripts.
+        prependChild(headNode, script);
     }
     else {
         DOM = ast || parseFragment(html);
-        appendChild(DOM, script);
+        prependChild(DOM, script);
     }
     //@ts-ignore
-    DOM.childNodes.forEach((node) => node.attrs?.push({ name: "data-hmr", value: htmlIdMap.get(file) }));
+    DOM.childNodes.forEach((node) => node.attrs?.push({ name: "data-hmr", value: id }));
     return serialize(DOM);
 }
 function randomText() {
     return Math.random().toString(32).slice(2);
 }
-function getHMRCode(file, id, src) {
-    return `import { render, html, $, $$, setShouldSetReactivity } from "hydro-js";
-  window.isHMR = true;
-  window.lastCalled = new Map();
-  window.htmlBundleHMRConnections ||= new Map();
-  window.htmlBundleHMRActiveId = "${id}";
-  let shouldReconnect = true;
-  let reconnectTimer;
-
-  for (const [hmrId, eventSource] of window.htmlBundleHMRConnections) {
-    if (hmrId !== "${id}") {
-      eventSource.close();
-      window.htmlBundleHMRConnections.delete(hmrId);
-      delete window["eventsource" + hmrId];
-    }
-  }
-
-  function closeEventSource() {
-    const eventSource = window.eventsource${id};
-    if (eventSource) {
-      eventSource.close();
-      window.htmlBundleHMRConnections.delete("${id}");
-      delete window.eventsource${id};
-    }
-  }
-
-  function connectEventSource() {
-    closeEventSource();
-    shouldReconnect = true;
-
-    const eventSource = new EventSource("/hmr");
-    window.eventsource${id} = eventSource;
-    window.htmlBundleHMRConnections.set("${id}", eventSource);
-
-    eventSource.addEventListener('error', () => {
-      eventSource.close();
-      if (window.eventsource${id} === eventSource) {
-        window.htmlBundleHMRConnections.delete("${id}");
-        delete window.eventsource${id};
-      }
-
-      if (shouldReconnect && window.htmlBundleHMRActiveId === "${id}") {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = setTimeout(connectEventSource, 1000);
-      }
-    });
-
-    eventSource.addEventListener("message", ({ data }) => {
-      if (window.lastScroll == null) {  
-        window.lastScroll = window.scrollY;
-      }
-      const dataObj = JSON.parse(data);
-      const file = "${file}";
-
-      if (file === dataObj.file && "html" in dataObj) {
-        let newHTML;
-        try {
-          newHTML = html\`\${dataObj.html}\`
-        } catch {
-          setShouldSetReactivity(false);
-          newHTML = html\`\${dataObj.html}\`
-          setShouldSetReactivity(true);
-        }
-        
-        if (dataObj.html.startsWith('<!DOCTYPE html>') || dataObj.html.startsWith('<html')) {
-          document.head.remove(); // Don't try to diff the head – just re-run the scripts
-
-          // Restore Scroll
-          window.addEventListener("afterRouting", () => {
-            window.scrollTo(0, window.lastScroll);
-            delete window.lastScroll;
-          }, { once: true })
-
-          render(newHTML, document.documentElement, false);
-        } else {
-          const hmrID = "${id}";
-          const hmrElems = Array.from(newHTML.childNodes);
-          const hmrWheres = Array.from($$(\`[data-hmr="\${hmrID}"]\`))
-          // render new elements for old elements. Then, remove rest old elements and add add new elements after the last old one
-          hmrWheres.forEach((where, index) => {
-            if (index < hmrElems.length) {
-              render(hmrElems[index], where, false);
-            } else {
-              where.remove();
-            }
-          });
-          for (let rest = hmrWheres.length; rest < hmrElems.length; rest++) {
-            if (hmrWheres.length) {
-              const template = document.createElement('template');
-              hmrElems[hmrWheres.length - 1].after(template);
-              render(hmrElems[rest], template, false);
-              template.remove();
-            } else {
-              render(hmrElems[rest], false, false)
-            }
-          }
-        }
-
-        $$('link[rel="stylesheet"][href]').forEach(link => {
-          link.setAttribute("href", link.getAttribute("href") + "?v=" + String(Math.random().toFixed(4)).slice(2));
-        })
-        if (dataObj.html.includes("<script")) updateElem("script");
-        
-        
-        if (dataObj.file === \`${src}/index.html\`) {
-          dispatchEvent(new Event("popstate"));
-        }
-      } else if (dataObj.file.endsWith(".css")) {
-        const now = performance.now();
-        if (!window.lastCalled.has(dataObj.file) || now - window.lastCalled.get(dataObj.file) > 100) {
-          $$('link[rel="stylesheet"][href]').forEach(link => {
-            link.setAttribute("href", link.getAttribute("href") + "?v=" + String(Math.random().toFixed(4)).slice(2));
-          })
-          window.lastCalled.set(dataObj.file, now)
-        }
-      } else if (dataObj.file.endsWith(".js")) {
-        const now = performance.now();
-        if (!window.lastCalled.has(dataObj.file) || now - window.lastCalled.get(dataObj.file) > 100) {
-          $$('link[rel="stylesheet"][href]').forEach(link => {
-            link.setAttribute("href", link.getAttribute("href") + "?v=" + String(Math.random().toFixed(4)).slice(2));
-          })
-          updateElem("script");
-          window.lastCalled.set(dataObj.file, now)
-        }
-      }
-      
-
-      function updateElem(type) {
-        const hmrId = "${id}";
-        const noSrcFile = dataObj.file.replace(\`${src}/\`, '');
-        const attr = type === "script" ? "src" : "href";
-        const elem = $(\`[data-hmr="\${hmrId}"] \${type}[\${attr}^="\${noSrcFile}"]\`); // could be $(\`\${type}[data-hmr="\${hmrId}"][\${attr}^="\${noSrcFile}"]\`) ?
-        
-        if (elem) {
-          updateOne(type, attr, elem)
-        } else {
-          for(const e of $$(\`[data-hmr="\${hmrId}"] \${type}\`)) {
-            updateOne(type, attr, e);
-          }
-        }
-      }
-
-      function updateOne(type, attr, elem) {
-        const clone = document.createElement(type);
-        for (const key of elem.getAttributeNames()) {
-          clone.setAttribute(key, elem.getAttribute(key));
-        }
-        const attrVal = elem.getAttribute(attr);
-        if (attrVal) clone.setAttribute(attr, attrVal + "?v=" + String(Math.random().toFixed(4)).slice(2));
-        render(clone, elem, false);
-      }
-    });
-  }
-
-  window.addEventListener("pagehide", () => {
-    shouldReconnect = false;
-    clearTimeout(reconnectTimer);
-    if (window.htmlBundleHMRActiveId === "${id}") {
-      delete window.htmlBundleHMRActiveId;
-    }
-    closeEventSource();
-  }, { once: true });
-
-  if (!window.eventsource${id}) {
-    connectEventSource();
-  }
-`;
+// Produce the per-page HMR client by substituting tokens into the shared runtime
+// template (src/hmr-client.ts). The runtime is injected as an inline module so
+// esbuild bundles hydro-js for it, but it coordinates through a single global hub
+// so every composed page shares one EventSource and patches its own region.
+function buildHMRClient(file, id, src) {
+    return hmrClientTemplate
+        .replaceAll("__HMR_FILE__", file)
+        .replaceAll("__HMR_ID__", id)
+        .replaceAll("__HMR_SRC__", src);
+}
+function prependChild(parent, node) {
+    // Insert as the first child so the HMR client runs before the page's own
+    // scripts — required for window.htmlBundleHMR.dispose()/data to be usable on
+    // initial load.
+    node.parentNode = parent;
+    parent.childNodes.unshift(node);
 }

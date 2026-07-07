@@ -92,6 +92,13 @@ async function build(files, firstRun = true) {
         console.log(`💻 Server listening on http${isSecure ? "s" : ""}://${bundleConfig.host === "::" ? "localhost" : bundleConfig.host}:${bundleConfig.port} and is shared in the local network.`);
         console.log(`⌛ Waiting for file changes ...`);
         const chokidarOptions = { awaitWriteFinish: false };
+        let rebuildQueue = Promise.resolve();
+        const enqueueRebuild = (file) => {
+            rebuildQueue = rebuildQueue
+                .catch(() => undefined)
+                .then(() => rebuild(file));
+            return rebuildQueue;
+        };
         if (postcssFile) {
             const postCSSWatcher = watch(postcssFile, chokidarOptions);
             const tailwindCSSWatcher = watch(postcssFile.replace("postcss", "tailwind"), chokidarOptions); // Assuming that the file ext is the same
@@ -111,7 +118,8 @@ async function build(files, firstRun = true) {
                 return;
             }
             try {
-                await rebuild(file);
+                files.push(file);
+                await enqueueRebuild(file);
             }
             catch { }
             console.log(`⚡ added ${file} to the build`);
@@ -121,7 +129,7 @@ async function build(files, firstRun = true) {
                 return;
             }
             file = String.raw `${file}`.replace(/\\/g, "/");
-            await rebuild(file);
+            await enqueueRebuild(file);
             console.log(`⚡ modified ${file} on the build`);
         });
         watcher.on("unlink", async (file) => {
@@ -129,6 +137,9 @@ async function build(files, firstRun = true) {
                 return;
             }
             file = String.raw `${file}`.replace(/\\/g, "/");
+            const fileIndex = files.indexOf(file);
+            if (fileIndex !== -1)
+                files.splice(fileIndex, 1);
             inlineFiles.delete(file);
             const buildFile = getBuildPath(file)
                 .replace(".ts", ".js")
@@ -141,46 +152,84 @@ async function build(files, firstRun = true) {
                     await rm(bfDir);
             }
             catch { }
+            serverSentEvents?.({ type: "full-reload", file });
             console.log(`⚡ deleted ${file} from the build`);
         });
         async function rebuild(file) {
             // Rebuild all CSS because a change in any file might need to trigger PostCSS zu rebuild(e.g. Tailwind CSS)
             await rebuildCSS(files.filter((file) => file.endsWith(".css")));
-            let html;
+            const htmlFiles = files.filter((f) => f.endsWith(".html"));
             if (file.endsWith(".html")) {
+                const previousHtml = builtHTMLCache.get(file);
                 // To refill the inlineFiles needed to build JS
-                for (const htmlFile of files.filter((file) => file.endsWith(".html"))) {
+                for (const htmlFile of htmlFiles) {
                     await writeInlineScripts(htmlFile);
                 }
                 await minifyCode();
-                for (const file of inlineFiles) {
-                    if (INLINE_BUNDLE_FILE.test(file)) {
-                        inlineFiles.delete(file);
-                        await rm(file);
+                for (const inline of inlineFiles) {
+                    if (INLINE_BUNDLE_FILE.test(inline)) {
+                        inlineFiles.delete(inline);
+                        await rm(inline);
                     }
                 }
-                html = await minifyHTML(file, getBuildPath(file));
+                const html = await minifyHTML(file, getBuildPath(file));
+                serverSentEvents?.({ type: "html", file, html, previousHtml });
             }
             else if (/\.(jsx?|tsx?)$/.test(file)) {
+                // A module change alters the inlined output of whichever page(s) import
+                // it. Rebuild every page, then emit only the pages whose HTML actually
+                // changed; the client diff re-runs just the scripts that differ, so
+                // unrelated pages keep their state.
                 inlineFiles.add(file);
+                for (const htmlFile of htmlFiles) {
+                    await writeInlineScripts(htmlFile);
+                }
                 await minifyCode();
+                for (const inline of inlineFiles) {
+                    if (INLINE_BUNDLE_FILE.test(inline)) {
+                        inlineFiles.delete(inline);
+                        await rm(inline);
+                    }
+                }
+                let didEmit = false;
+                for (const htmlFile of htmlFiles) {
+                    const previousHtml = builtHTMLCache.get(htmlFile);
+                    const html = await minifyHTML(htmlFile, getBuildPath(htmlFile));
+                    if (html !== previousHtml) {
+                        didEmit = true;
+                        serverSentEvents?.({
+                            type: "html",
+                            file: htmlFile,
+                            html,
+                            previousHtml,
+                        });
+                    }
+                }
+                if (!didEmit) {
+                    serverSentEvents?.({ type: "full-reload", file });
+                }
             }
-            else if (!file.endsWith(".css")) {
+            else if (file.endsWith(".css")) {
+                serverSentEvents?.({ type: "css", file });
+            }
+            else {
                 if (handlerFile) {
-                    execFilePromise("node", [handlerFile, file]).then(({ stdout }) => {
+                    try {
+                        const { stdout } = await execFilePromise("node", [
+                            handlerFile,
+                            file,
+                        ]);
                         console.log("📋 Logging Handler: ", String(stdout));
-                    });
+                    }
+                    catch (err) {
+                        console.error(err);
+                    }
                 }
                 else {
                     await fileCopy(file);
                 }
+                serverSentEvents?.({ type: "asset", file });
             }
-            else if (handlerFile) {
-                execFilePromise("node", [handlerFile, file]).then(({ stdout }) => {
-                    console.log("📋 Logging Handler: ", String(stdout));
-                });
-            }
-            serverSentEvents?.({ file, html });
         }
     }
 }
@@ -245,6 +294,7 @@ async function minifyCode() {
     }
 }
 const htmlFilesCache = new Map();
+const builtHTMLCache = new Map();
 async function writeInlineScripts(file) {
     let fileText = await readFile(file, { encoding: "utf-8" });
     let DOM;
@@ -359,6 +409,7 @@ async function minifyHTML(file, buildFile) {
         }
     }
     await writeFile(buildFile, fileText);
+    builtHTMLCache.set(file, fileText);
     return fileText;
 }
 async function rebuildCSS(files, config) {

@@ -9,10 +9,22 @@ export declare const bundleConfig: Config;
 export declare function fileCopy(file: string): Promise<void>;
 export declare function createDir(file: string): Promise<string | undefined>;
 export declare function getBuildPath(file: string): string;
-export declare let serverSentEvents: undefined | (({ file, html }: {
+export type HMREvent = {
+    type: "html";
     file: string;
     html?: string;
-}) => void);
+    previousHtml?: string;
+} | {
+    type: "css";
+    file: string;
+} | {
+    type: "asset";
+    file: string;
+} | {
+    type: "full-reload";
+    file: string;
+};
+export declare let serverSentEvents: undefined | ((event: HMREvent) => void);
 export declare function createDefaultServer(isSecure: boolean): Promise<[Router, Server | HTTPSServer]>;
 export declare function getPostCSSConfig(): Promise<postcssrc.Result | {
     plugins: (typeof cssnano)[];

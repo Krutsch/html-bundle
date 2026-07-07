@@ -10,7 +10,7 @@ A (primarily) zero-config bundler for HTML files. The idea is to use HTML as Sin
 
 - 🦾 TypeScript (reference it as .js or write inline TS)
 - 📦 Automatic Package Installation
-- 💨 HMR and automatic reconnect
+- 💨 State-preserving HMR with automatic reconnect and full-reload fallback
 - ⚡ [ESBuild](https://github.com/evanw/esbuild)
 - 🦔 [Critical CSS](https://www.npmjs.com/package/beasties)
 - 🚋 Watcher on PostCSS and Tailwind CSS and TS Config
@@ -45,13 +45,45 @@ $ npm run build
 
 ## CLI
 
-`--hmr`: boots up a static server and enables Hot Module Replacement. **This generates a development build and works best when not triggered from the main index.html**<br>
+`--hmr`: boots up a static server and enables Hot Module Replacement. See [HMR](#hmr) for what is hot-patched in place versus reloaded.<br>
 `--secure`: creates a secure HTTP2 over HTTPS instance. This requires the files `localhost.pem` and `localhost-key.pem` in the root folder. You can generate them with [mkcert](https://github.com/FiloSottile/mkcert) for instance.<br>
 `--isCritical`: uses critical to extract and inline critical-path CSS to HTML.<br>
 `--handler`: path to your custom handler. Here, you can handle all non-supported files. You can get the filename via `process.argv[2]`.
 
+## HMR
+
+With `--hmr`, every change is pushed over a single Server-Sent-Events connection and applied without a full reload wherever that is safe:
+
+- **HTML** (text, attributes, inline `<style>`) is diffed and patched in place. Only the `<script>`s whose code actually changed are re-executed, so unrelated state is preserved. Inserting or removing surrounding markup keeps dynamically rendered/fetched content intact.
+- **CSS** (linked or inline) and **assets** (images, etc.) are swapped by cache-busting the matching element — no reload.
+- **TS/JS modules** are re-bundled; the page(s) that inline them are re-emitted and hot-patched.
+- **Dead ends** — a change with no owning page (e.g. a web-worker entry) or a deleted file — trigger a single debounced **full page reload**, so you never get stuck on a stale view.
+
+Composed apps (pages that fetch and render other pages) are supported: every live page shares one connection and only its own region is patched. After HMR operations the `popstate` event is dispatched to nudge SPA routers.
+
+### Client API (optional)
+
+Inside any HMR-managed page you can opt into lifecycle hooks — useful for side-effectful top-level code so a hot update does not duplicate its effects:
+
+```js
+if (window.htmlBundleHMR) {
+  // run cleanup before this unit's changed scripts re-run
+  window.htmlBundleHMR.dispose(() => {
+    /* e.g. remove nodes this script appended */
+  });
+  // run after this page has been patched
+  window.htmlBundleHMR.accept(() => {
+    /* re-init if needed */
+  });
+  // a plain object that persists across hot updates
+  window.htmlBundleHMR.data.rendered = true;
+}
+```
+
 ## import
+
 It is also possible to start the server by importing the package. This could be useful, if you intend to add routes for local development.
+
 ```js
 import router from "html-bundle";
 
@@ -59,7 +91,6 @@ router.get("/test", (_req, reply) => {
   return reply.send("hi");
 });
 ```
-
 
 ## Optional Config
 
