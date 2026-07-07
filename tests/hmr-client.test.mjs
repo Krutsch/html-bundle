@@ -93,6 +93,32 @@ test("shared hub patches a full-document title change in place", async () => {
   assert.equal(document.querySelector("title").textContent, "After");
 });
 
+test("window.isHMR is hidden from the page's own initial scripts, then set for hot re-runs", async () => {
+  // Regression: the client is injected as the first <head> module so its hub and
+  // public API exist before the page's own scripts. It must NOT flip
+  // window.isHMR before those scripts run, or one-time guards such as
+  // `if (!window.isHMR) createRouter()` get skipped on the pristine load — the
+  // symptom being an SPA whose outlet never mounts (an almost-empty page).
+  const { window, document, loadPage } = await setup();
+  assert.equal(document.readyState, "interactive"); // pristine load, still parsing
+
+  loadPage("src/index.html", "idx1");
+  assert.notEqual(
+    window.isHMR,
+    true,
+    "isHMR must stay falsy while the page's own scripts run",
+  );
+
+  // DOMContentLoaded fires after those scripts; HMR mode is now observable so a
+  // subsequent hot re-execution can take the isHMR branch and skip re-init.
+  document.dispatchEvent(new window.Event("DOMContentLoaded"));
+  assert.equal(
+    window.isHMR,
+    true,
+    "isHMR is set once the initial load settles",
+  );
+});
+
 test("full-document insertion before a composed mount preserves fetched content", async () => {
   const { document, loadPage, reloadCount } = await setup();
   const before =

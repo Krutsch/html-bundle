@@ -72,7 +72,26 @@ const SRC = "__HMR_SRC__";
 const REGION = '[data-hmr="__HMR_ID__"]';
 const CLIENT = 'script[data-hmr-client="__HMR_ID__"]';
 
-window.isHMR = true;
+// The client is injected as the first <head> module so its hub and public API
+// exist before the page's own scripts run. But `window.isHMR` must NOT be
+// observable while those scripts execute for the first time: user code commonly
+// branches on it to run one-time setup exactly once (e.g.
+// `if (!window.isHMR) createRouter()`), relying on the flag being false on the
+// pristine load and true on every hot re-run afterwards. Assigning it eagerly
+// here runs before the page scripts and breaks that contract, leaving one-time
+// init skipped (e.g. an SPA router never mounts, so its outlet stays empty).
+// Flag it only after the initial module scripts have executed:
+//   - initial load: readyState is "interactive"; set it on DOMContentLoaded,
+//     which fires after the page's own deferred/module scripts.
+//   - hot re-render / composed page registered post-load: readyState is
+//     "complete"; set it immediately, since we are already past the first load.
+if (document.readyState === "complete") {
+  window.isHMR = true;
+} else {
+  document.addEventListener("DOMContentLoaded", () => (window.isHMR = true), {
+    once: true,
+  });
+}
 
 // One hub per browsing context, created by whichever page loads first. Every
 // composed sub-page (index.html + fetched fragments) registers into it and stays
