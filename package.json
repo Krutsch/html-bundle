@@ -41,7 +41,7 @@
   },
   "bugs": "https://github.com/Krutsch/html-bundle/issues",
   "dependencies": {
-    "@web/parse5-utils": "^2.1.1",
+    "@web/parse5-utils": "^3.0.0",
     "await-spawn": "^4.0.2",
     "beasties": "^0.4.2",
     "chokidar": "^5.0.0",
