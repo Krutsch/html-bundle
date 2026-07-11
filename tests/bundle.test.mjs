@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import {
+  chmod,
   mkdtemp,
   mkdir,
   readdir,
@@ -78,6 +79,107 @@ document.body.dataset.external = message;`,
     readFile(path.join(cwd, "src", "index-bundle-1.tsx"), "utf8"),
     { code: "ENOENT" },
   );
+});
+
+test("CLI fails cleanly when inline code cannot be bundled", async (t) => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "html-bundle-invalid-code-"));
+  t.after(() => rm(cwd, { force: true, recursive: true }));
+
+  await mkdir(path.join(cwd, "src"), { recursive: true });
+  await writeFile(
+    path.join(cwd, "src", "index.html"),
+    `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Invalid code</title>
+    <script type="module">const value: = "invalid";</script>
+  </head>
+  <body><main>Invalid code</main></body>
+</html>`,
+  );
+
+  await assert.rejects(
+    execFilePromise(process.execPath, [bundlePath], { cwd }),
+    (error) => {
+      assert.match(String(error.stderr), /Unexpected "="/);
+      return true;
+    },
+  );
+
+  const srcEntries = await readdir(path.join(cwd, "src"));
+  assert.ok(!srcEntries.some((entry) => /-bundle-\d+\.tsx$/.test(entry)));
+});
+
+test("CLI does not pass unresolved local imports to npm", async (t) => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "html-bundle-local-import-"));
+  t.after(() => rm(cwd, { force: true, recursive: true }));
+
+  const binDirectory = path.join(cwd, "bin");
+  const npmMarker = path.join(cwd, "npm-was-called");
+  await mkdir(path.join(cwd, "src"), { recursive: true });
+  await mkdir(binDirectory);
+  await writeFile(
+    path.join(cwd, "src", "index.html"),
+    `<!DOCTYPE html><html><head><title>Missing local import</title><script type="module">import "./missing.js";</script></head><body></body></html>`,
+  );
+
+  const fakeNpm = path.join(
+    binDirectory,
+    process.platform === "win32" ? "npm.cmd" : "npm",
+  );
+  await writeFile(
+    fakeNpm,
+    process.platform === "win32"
+      ? `@echo called>"%NPM_MARKER%"\r\n@exit /b 1\r\n`
+      : `#!/usr/bin/env node\nrequire("node:fs").writeFileSync(process.env.NPM_MARKER, "called");\nprocess.exit(1);\n`,
+  );
+  if (process.platform !== "win32") await chmod(fakeNpm, 0o755);
+
+  await assert.rejects(
+    execFilePromise(process.execPath, [bundlePath], {
+      cwd,
+      env: {
+        ...process.env,
+        PATH: `${binDirectory}${path.delimiter}${process.env.PATH}`,
+        NPM_MARKER: npmMarker,
+      },
+    }),
+    (error) => {
+      assert.match(String(error.stderr), /Could not resolve/);
+      return true;
+    },
+  );
+  await assert.rejects(readFile(npmMarker, "utf8"), { code: "ENOENT" });
+});
+
+test("CLI reports inline PostCSS failures without crashing", async (t) => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "html-bundle-postcss-error-"));
+  t.after(() => rm(cwd, { force: true, recursive: true }));
+
+  await mkdir(path.join(cwd, "src"), { recursive: true });
+  await writeFile(
+    path.join(cwd, "package.json"),
+    JSON.stringify({ type: "module" }),
+  );
+  await writeFile(
+    path.join(cwd, "postcss.config.js"),
+    `export default {
+  plugins: [{
+    postcssPlugin: "fixture-error",
+    Once() { throw new Error("INLINE_CSS_FAILURE"); },
+  }],
+};\n`,
+  );
+  await writeFile(
+    path.join(cwd, "src", "index.html"),
+    `<!DOCTYPE html><html><head><title>CSS error</title><style>main { color: red; }</style></head><body><main>CSS error</main></body></html>`,
+  );
+
+  const { stderr } = await execFilePromise(process.execPath, [bundlePath], {
+    cwd,
+  });
+  assert.match(stderr, /INLINE_CSS_FAILURE/);
+  assert.doesNotMatch(stderr, /err is not defined|undefined/);
 });
 
 test("addHMRCode injects stable HMR wiring", async () => {

@@ -219,9 +219,13 @@ test("HMR server emits typed events and funnels module edits to owning pages", a
 </html>`,
   );
   const modPath = path.join(cwd, "src", "mod.ts");
+  const nestedModuleDir = path.join(cwd, "src", "feature.ts-files");
+  const nestedModulePath = path.join(nestedModuleDir, "standalone.ts");
   const workerCodePath = path.join(cwd, "src", "workerCode.ts");
   const cssPath = path.join(cwd, "src", "styles.css");
+  await mkdir(nestedModuleDir, { recursive: true });
   await writeFile(modPath, `export const value: number = 1;\n`);
+  await writeFile(nestedModulePath, `export const nested: number = 1;\n`);
   await writeFile(
     workerCodePath,
     `globalThis.postMessage?.({ value: 1 });\nexport const value = 1;\n`,
@@ -230,12 +234,16 @@ test("HMR server emits typed events and funnels module edits to owning pages", a
 
   const server = spawn(process.execPath, [bundlePath, "--hmr"], { cwd });
   t.after(() => server.kill("SIGKILL"));
-  server.stderr.on("data", () => {});
+  let serverErrors = "";
+  server.stderr.on("data", (chunk) => (serverErrors += chunk));
 
   await waitForListening(server);
   const events = [];
+  const secondClientEvents = [];
   const req = await subscribe(events);
+  const secondReq = await subscribe(secondClientEvents);
   t.after(() => req.destroy());
+  t.after(() => secondReq.destroy());
   await wait(300);
 
   // 1. Module edit funnels into an "html" update for the owning page.
@@ -251,8 +259,44 @@ test("HMR server emits typed events and funnels module edits to owning pages", a
     "module change should emit an html event for index.html",
   );
   assert.equal(typeof moduleEvent.html, "string");
+  const secondClientModuleEvent = await until(() =>
+    secondClientEvents.find(
+      (event) => event.type === "html" && event.file === "src/index.html",
+    ),
+  );
+  assert.ok(secondClientModuleEvent, "every HMR client should receive updates");
 
-  // 2. CSS edit emits a css event (client busts stylesheets).
+  // 2. A failed rebuild is reported, and the queue accepts the next valid edit.
+  await writeFile(modPath, `export const value: number = ;\n`);
+  assert.ok(
+    await until(() => /Unexpected ";"/.test(serverErrors)),
+    "invalid module code should be reported",
+  );
+  const beforeRecovery = events.length;
+  const secondClientBeforeRecovery = secondClientEvents.length;
+  await writeFile(modPath, `export const value: number = 3;\n`);
+  assert.ok(
+    await until(() =>
+      events
+        .slice(beforeRecovery)
+        .find(
+          (event) => event.type === "html" && event.file === "src/index.html",
+        ),
+    ),
+    "HMR should recover after a failed rebuild",
+  );
+  assert.ok(
+    await until(() =>
+      secondClientEvents
+        .slice(secondClientBeforeRecovery)
+        .find(
+          (event) => event.type === "html" && event.file === "src/index.html",
+        ),
+    ),
+    "every HMR client should receive the recovered update",
+  );
+
+  // 3. CSS edit emits a css event (client busts stylesheets).
   const beforeCss = events.length;
   await writeFile(cssPath, `body { color: blue; }\n`);
   const cssEvent = await until(() =>
@@ -261,7 +305,7 @@ test("HMR server emits typed events and funnels module edits to owning pages", a
   assert.ok(cssEvent, "css change should emit a css event");
   assert.match(cssEvent.file, /styles\.css$/);
 
-  // 3. A module entry with no changed owning page is an HMR dead end, so the
+  // 4. A module entry with no changed owning page is an HMR dead end, so the
   // client should reload automatically instead of leaving the user stuck.
   const beforeWorker = events.length;
   await writeFile(
@@ -277,7 +321,27 @@ test("HMR server emits typed events and funnels module edits to owning pages", a
   );
   assert.ok(workerEvent, "dead-end module change should emit full-reload");
 
-  // 4. Legacy untyped fields are gone (client dispatches on `type`).
+  // 5. Deleting a module removes its built output even when a parent directory
+  // contains an extension-like substring.
+  const beforeDelete = events.length;
+  await rm(nestedModulePath);
+  const deleteEvent = await until(() =>
+    events
+      .slice(beforeDelete)
+      .find(
+        (e) => e.type === "full-reload" && /standalone\.ts$/.test(e.file || ""),
+      ),
+  );
+  assert.ok(deleteEvent, "module deletion should emit full-reload");
+  await assert.rejects(
+    readFile(
+      path.join(cwd, "build", "feature.ts-files", "standalone.js"),
+      "utf8",
+    ),
+    { code: "ENOENT" },
+  );
+
+  // 6. Legacy untyped fields are gone (client dispatches on `type`).
   assert.ok(
     events.every((e) => typeof e.type === "string"),
     "every event carries a type",

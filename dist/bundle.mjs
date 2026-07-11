@@ -3,7 +3,7 @@ import { performance } from "perf_hooks";
 import { readFile, rm, writeFile, readdir, lstat } from "fs/promises";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { sep } from "path";
+import { dirname, join, sep } from "path";
 import { availableParallelism } from "os";
 import { glob } from "glob";
 import postcss from "postcss";
@@ -39,6 +39,7 @@ const inlineFiles = new Set();
 const TEMPLATE_LITERAL_MINIFIER = /\n\s+/g;
 const INLINE_BUNDLE_FILE = /-bundle-\d+.tsx$/;
 const SUPPORTED_FILES = /\.(html|css|jsx?|tsx?)$/;
+const CONFIG_EXTENSIONS = ["js", "mjs", "cjs", "ts", "mts", "cts"];
 const execFilePromise = promisify(execFile);
 if (bundleConfig.deletePrev) {
     await rm(bundleConfig.build, { force: true, recursive: true });
@@ -46,6 +47,16 @@ if (bundleConfig.deletePrev) {
 async function cleanupStaleInlineBundleFiles() {
     const staleFiles = await glob(`${bundleConfig.src}/**/*-bundle-*.tsx`);
     await Promise.all(staleFiles.map((file) => rm(file.replaceAll(sep, "/"), { force: true })));
+}
+async function bundleInlineCode() {
+    try {
+        await minifyCode();
+    }
+    finally {
+        const generatedFiles = Array.from(inlineFiles).filter((file) => INLINE_BUNDLE_FILE.test(file));
+        await Promise.all(generatedFiles.map((file) => rm(file, { force: true })));
+        generatedFiles.forEach((file) => inlineFiles.delete(file));
+    }
 }
 async function build(files, firstRun = true) {
     const handlerTasks = [];
@@ -76,13 +87,7 @@ async function build(files, firstRun = true) {
             }
         }
     }
-    await minifyCode();
-    for (const file of inlineFiles) {
-        if (INLINE_BUNDLE_FILE.test(file)) {
-            inlineFiles.delete(file);
-            await rm(file);
-        }
-    }
+    await bundleInlineCode();
     for (const file of files) {
         if (file.endsWith(".html")) {
             await minifyHTML(file, getBuildPath(file));
@@ -99,15 +104,14 @@ async function build(files, firstRun = true) {
         const chokidarOptions = { awaitWriteFinish: false };
         let rebuildQueue = Promise.resolve();
         const enqueueRebuild = (file) => {
-            rebuildQueue = rebuildQueue
-                .catch(() => undefined)
-                .then(() => rebuild(file));
+            rebuildQueue = rebuildQueue.then(() => rebuild(file)).catch(console.error);
             return rebuildQueue;
         };
         if (postcssFile) {
+            const configDirectory = dirname(postcssFile);
             const postCSSWatcher = watch(postcssFile, chokidarOptions);
-            const tailwindCSSWatcher = watch(postcssFile.replace("postcss", "tailwind"), chokidarOptions); // Assuming that the file ext is the same
-            const tsConfigWatcher = watch(postcssFile.split("\\").slice(0, -1).join("\\") + "\\tsconfig.json", chokidarOptions);
+            const tailwindCSSWatcher = watch(CONFIG_EXTENSIONS.map((extension) => join(configDirectory, `tailwind.config.${extension}`)), chokidarOptions);
+            const tsConfigWatcher = watch(join(configDirectory, "tsconfig.json"), chokidarOptions);
             const cssFiles = files.filter((file) => file.endsWith(".css"));
             postCSSWatcher.on("change", async () => await rebuildCSS(cssFiles, "postcss"));
             tailwindCSSWatcher.on("change", async () => await rebuildCSS(cssFiles, "tailwind"));
@@ -146,9 +150,7 @@ async function build(files, firstRun = true) {
             if (fileIndex !== -1)
                 files.splice(fileIndex, 1);
             inlineFiles.delete(file);
-            const buildFile = getBuildPath(file)
-                .replace(".ts", ".js")
-                .replace(".jsx", ".js");
+            const buildFile = getBuildPath(file).replace(/\.(jsx?|tsx?)$/, ".js");
             try {
                 await rm(buildFile);
                 const bfDir = buildFile.split("/").slice(0, -1).join("/");
@@ -170,13 +172,7 @@ async function build(files, firstRun = true) {
                 for (const htmlFile of htmlFiles) {
                     await writeInlineScripts(htmlFile);
                 }
-                await minifyCode();
-                for (const inline of inlineFiles) {
-                    if (INLINE_BUNDLE_FILE.test(inline)) {
-                        inlineFiles.delete(inline);
-                        await rm(inline);
-                    }
-                }
+                await bundleInlineCode();
                 const html = await minifyHTML(file, getBuildPath(file));
                 serverSentEvents?.({ type: "html", file, html, previousHtml });
             }
@@ -189,13 +185,7 @@ async function build(files, firstRun = true) {
                 for (const htmlFile of htmlFiles) {
                     await writeInlineScripts(htmlFile);
                 }
-                await minifyCode();
-                for (const inline of inlineFiles) {
-                    if (INLINE_BUNDLE_FILE.test(inline)) {
-                        inlineFiles.delete(inline);
-                        await rm(inline);
-                    }
-                }
+                await bundleInlineCode();
                 let didEmit = false;
                 for (const htmlFile of htmlFiles) {
                     const previousHtml = builtHTMLCache.get(htmlFile);
@@ -250,6 +240,22 @@ function getArgValue(name) {
     const index = process.argv.indexOf(name);
     return index === -1 ? undefined : process.argv[index + 1];
 }
+function getInstallablePackageName(message) {
+    const specifier = message.match(/"([^"]+)"/)?.[1];
+    if (!specifier ||
+        specifier.startsWith(".") ||
+        specifier.startsWith("/") ||
+        specifier.startsWith("#") ||
+        specifier.includes(":")) {
+        return undefined;
+    }
+    const parts = specifier.split("/");
+    return specifier.startsWith("@")
+        ? parts.length >= 2
+            ? parts.slice(0, 2).join("/")
+            : undefined
+        : parts[0];
+}
 async function runHandler(file) {
     if (!handlerFile)
         return;
@@ -257,6 +263,14 @@ async function runHandler(file) {
     const output = String(stdout).trim();
     if (output)
         console.log("📋 Logging Handler: ", output);
+}
+function getErrorMessage(error) {
+    if (typeof error === "object" && error !== null && "reason" in error) {
+        const reason = error.reason;
+        if (typeof reason === "string")
+            return reason;
+    }
+    return error instanceof Error ? error.message : String(error);
 }
 async function minifyCSS(file, buildFile) {
     try {
@@ -269,13 +283,12 @@ async function minifyCSS(file, buildFile) {
         await writeFile(buildFile, result.css);
     }
     catch (err) {
-        // @ts-ignore
-        console.error(err?.reason);
+        console.error(getErrorMessage(err));
     }
 }
 async function minifyCode() {
     try {
-        return await esbuild.build({
+        await esbuild.build({
             entryPoints: Array.from(inlineFiles),
             charset: "utf8",
             format: "esm",
@@ -291,19 +304,16 @@ async function minifyCode() {
             outbase: bundleConfig.src,
             ...bundleConfig.esbuild,
         });
-        // Stop app from crashing.
     }
     catch (err) {
-        if (!isHMR) {
-            console.error(err);
-        }
         let missingPkg = false;
         if (err?.errors) {
             for (const error of err.errors) {
                 if (error.location && error.text?.startsWith("Could not resolve")) {
+                    const pkgName = getInstallablePackageName(error.text);
+                    if (!pkgName)
+                        continue;
                     missingPkg = true;
-                    const packageNameRegex = /(?<=").*(?=")/;
-                    const [pkgName] = error.text.match(packageNameRegex);
                     await awaitSpawn(process.platform === "win32" ? "npm.cmd" : "npm", [
                         "install",
                         pkgName,
@@ -312,10 +322,10 @@ async function minifyCode() {
                 }
             }
             if (missingPkg) {
-                missingPkg = false;
                 return minifyCode();
             }
         }
+        throw err;
     }
 }
 const htmlFilesCache = new Map();
@@ -403,9 +413,8 @@ async function minifyHTML(file, buildFile) {
             });
             node.value = css;
         }
-        catch {
-            // @ts-ignore
-            console.error(err?.reason);
+        catch (err) {
+            console.error(getErrorMessage(err));
         }
     }
     fileText = serialize(DOM);
