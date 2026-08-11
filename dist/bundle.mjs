@@ -15,7 +15,7 @@ import { watch } from "chokidar";
 import { serialize, parse, parseFragment } from "parse5";
 import { getTagName, findElements } from "@web/parse5-utils";
 import awaitSpawn from "await-spawn";
-import { fileCopy, createDefaultServer, getPostCSSConfig, getBuildPath, createDir, bundleConfig, serverSentEvents, addHMRCode, } from "./utils.mjs";
+import { fileCopy, createDefaultServer, getPostCSSConfig, getBuildPath, createDir, bundleConfig, serverSentEvents, addHMRCode, listenOnAvailablePort, } from "./utils.mjs";
 const isHMR = process.argv.includes("--hmr") || bundleConfig.hmr;
 const isCritical = process.argv.includes("--isCritical") || bundleConfig.isCritical;
 const beasties = new Beasties({
@@ -98,13 +98,15 @@ async function build(files, firstRun = true) {
     if (isHMR && firstRun) {
         const [dynamicRouter, server] = await createDefaultServer(isSecure);
         router = dynamicRouter;
-        server.listen({ port: bundleConfig.port, host: bundleConfig.host });
+        bundleConfig.port = await listenOnAvailablePort(server, bundleConfig.port, bundleConfig.host);
         console.log(`💻 Server listening on http${isSecure ? "s" : ""}://${bundleConfig.host === "::" ? "localhost" : bundleConfig.host}:${bundleConfig.port} and is shared in the local network.`);
         console.log(`⌛ Waiting for file changes ...`);
         const chokidarOptions = { awaitWriteFinish: false };
         let rebuildQueue = Promise.resolve();
         const enqueueRebuild = (file) => {
-            rebuildQueue = rebuildQueue.then(() => rebuild(file)).catch(console.error);
+            rebuildQueue = rebuildQueue
+                .then(() => rebuild(file))
+                .catch(console.error);
             return rebuildQueue;
         };
         if (postcssFile) {

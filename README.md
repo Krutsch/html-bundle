@@ -100,7 +100,7 @@ Generate the config in the root and call it "bundle.config.js"
 
 **src:** input path. Default to "src"<br>
 **build:** output path. Defaults to "build"<br>
-**port:** For the HMR Server. Defaults to 5000<br>
+**port:** For the HMR Server. Defaults to 5000. If occupied, the server tries the next available port. The startup URL reports the selected port<br>
 **deletePrev:** Whether to delelte the build folder. Defaults to true<br>
 **esbuild:** Your additional config<br>
 **html-minifier-terser:** Your additional config<br>

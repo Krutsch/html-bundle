@@ -29,6 +29,7 @@ import {
   bundleConfig,
   serverSentEvents,
   addHMRCode,
+  listenOnAvailablePort,
 } from "./utils.mjs";
 
 const isHMR = process.argv.includes("--hmr") || bundleConfig.hmr;
@@ -126,7 +127,11 @@ async function build(files: string[], firstRun = true) {
   if (isHMR && firstRun) {
     const [dynamicRouter, server] = await createDefaultServer(isSecure);
     router = dynamicRouter;
-    server.listen({ port: bundleConfig.port, host: bundleConfig.host });
+    bundleConfig.port = await listenOnAvailablePort(
+      server,
+      bundleConfig.port,
+      bundleConfig.host,
+    );
     console.log(
       `💻 Server listening on http${isSecure ? "s" : ""}://${
         bundleConfig.host === "::" ? "localhost" : bundleConfig.host

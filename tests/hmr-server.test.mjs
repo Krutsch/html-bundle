@@ -14,7 +14,6 @@ import { promisify } from "node:util";
 const repoRoot = path.resolve(new URL("..", import.meta.url).pathname);
 const bundlePath = path.join(repoRoot, "dist", "bundle.mjs");
 const PORT = 5323;
-const SECURE_PORT = 5324;
 const execFilePromise = promisify(execFile);
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -114,21 +113,46 @@ async function writeLocalhostCertificate(cwd, t) {
   }
 }
 
-async function requestHttpRedirect(pathname) {
+async function startPortBlocker() {
+  const server = http.createServer();
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen({ port: 0, host: "127.0.0.1" }, resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("port blocker did not expose a listening port");
+  }
+  return { server, port: address.port };
+}
+
+function requestHttp(port, pathname) {
+  return new Promise((resolve, reject) => {
+    const req = http.get(
+      { hostname: "127.0.0.1", port, path: pathname },
+      (res) => {
+        res.setEncoding("utf8");
+        let body = "";
+        res.on("data", (chunk) => (body += chunk));
+        res.on("end", () => resolve({ statusCode: res.statusCode, body }));
+      },
+    );
+    req.on("error", reject);
+  });
+}
+
+async function requestHttpRedirect(port, pathname) {
   let lastError;
   for (let attempt = 0; attempt < 40; attempt++) {
     try {
       return await new Promise((resolve, reject) => {
-        const req = http.get(
-          `http://127.0.0.1:${SECURE_PORT}${pathname}`,
-          (res) => {
-            res.resume();
-            resolve({
-              statusCode: res.statusCode,
-              location: res.headers.location,
-            });
-          },
-        );
+        const req = http.get(`http://127.0.0.1:${port}${pathname}`, (res) => {
+          res.resume();
+          resolve({
+            statusCode: res.statusCode,
+            location: res.headers.location,
+          });
+        });
         req.on("error", reject);
       });
     } catch (error) {
@@ -139,12 +163,12 @@ async function requestHttpRedirect(pathname) {
   throw lastError;
 }
 
-function requestHttps(pathname) {
+function requestHttps(port, pathname) {
   return new Promise((resolve, reject) => {
     const req = https.get(
       {
         hostname: "127.0.0.1",
-        port: SECURE_PORT,
+        port,
         path: pathname,
         rejectUnauthorized: false,
       },
@@ -164,10 +188,12 @@ test("secure HMR server redirects plain HTTP on the same port", async (t) => {
   t.after(() => rm(cwd, { force: true, recursive: true }));
   await mkdir(path.join(cwd, "src"), { recursive: true });
   if (!(await writeLocalhostCertificate(cwd, t))) return;
+  const blocker = await startPortBlocker();
+  t.after(() => new Promise((resolve) => blocker.server.close(resolve)));
 
   await writeFile(
     path.join(cwd, "bundle.config.js"),
-    `export default { port: ${SECURE_PORT}, host: "127.0.0.1", deletePrev: true };\n`,
+    `export default { port: ${blocker.port}, host: "127.0.0.1", deletePrev: true };\n`,
   );
   await writeFile(
     path.join(cwd, "src", "index.html"),
@@ -179,19 +205,65 @@ test("secure HMR server redirects plain HTTP on the same port", async (t) => {
   });
   t.after(() => server.kill("SIGKILL"));
   server.stderr.on("data", () => {});
+  let output = "";
+  server.stdout.on("data", (chunk) => (output += chunk));
 
   await waitForListening(server);
+  const listeningMatch = output.match(
+    /Server listening on https:\/\/127\.0\.0\.1:(\d+)/,
+  );
+  assert.ok(listeningMatch, "startup should report selected HTTPS port");
+  const securePort = Number(listeningMatch[1]);
+  assert.equal(securePort, blocker.port + 1);
 
-  const redirect = await requestHttpRedirect("/quickstart/checkbox");
+  const redirect = await requestHttpRedirect(
+    securePort,
+    "/quickstart/checkbox",
+  );
   assert.equal(redirect.statusCode, 307);
   assert.equal(
     redirect.location,
-    `https://127.0.0.1:${SECURE_PORT}/quickstart/checkbox`,
+    `https://127.0.0.1:${securePort}/quickstart/checkbox`,
   );
 
-  const app = await requestHttps("/");
+  const app = await requestHttps(securePort, "/");
   assert.equal(app.statusCode, 200);
   assert.match(app.body, /Secure fixture/);
+});
+
+test("HMR server tries the next port when configured port is occupied", async (t) => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "html-bundle-port-fallback-"));
+  t.after(() => rm(cwd, { force: true, recursive: true }));
+  await mkdir(path.join(cwd, "src"), { recursive: true });
+  const blocker = await startPortBlocker();
+  t.after(() => new Promise((resolve) => blocker.server.close(resolve)));
+
+  await writeFile(
+    path.join(cwd, "bundle.config.js"),
+    `export default { port: ${blocker.port}, host: "127.0.0.1", deletePrev: true };\n`,
+  );
+  await writeFile(
+    path.join(cwd, "src", "index.html"),
+    `<!DOCTYPE html><html><head><title>Fallback fixture</title></head><body><main>Fallback fixture</main></body></html>`,
+  );
+
+  const server = spawn(process.execPath, [bundlePath, "--hmr"], { cwd });
+  t.after(() => server.kill("SIGKILL"));
+  server.stderr.on("data", () => {});
+  let output = "";
+  server.stdout.on("data", (chunk) => (output += chunk));
+
+  await waitForListening(server);
+  const listeningMatch = output.match(
+    /Server listening on http:\/\/127\.0\.0\.1:(\d+)/,
+  );
+  assert.ok(listeningMatch, "startup should report selected HTTP port");
+  const port = Number(listeningMatch[1]);
+  assert.equal(port, blocker.port + 1);
+
+  const response = await requestHttp(port, "/");
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /Fallback fixture/);
 });
 
 test("HMR server emits typed events and funnels module edits to owning pages", async (t) => {

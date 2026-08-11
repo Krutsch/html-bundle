@@ -89,6 +89,39 @@ export async function createDefaultServer(isSecure) {
             : http.createServer({}, app),
     ];
 }
+export function listenOnAvailablePort(server, port, host) {
+    return new Promise((resolve, reject) => {
+        let candidatePort = port;
+        const listen = () => {
+            const onListening = () => {
+                server.removeListener("error", onError);
+                const address = server.address();
+                if (!address || typeof address === "string") {
+                    reject(new Error("Server did not expose a listening port"));
+                    return;
+                }
+                resolve(address.port);
+            };
+            const onError = (error) => {
+                server.removeListener("listening", onListening);
+                if (error.code !== "EADDRINUSE") {
+                    reject(error);
+                    return;
+                }
+                if (candidatePort >= 65535) {
+                    reject(error);
+                    return;
+                }
+                candidatePort += 1;
+                listen();
+            };
+            server.once("listening", onListening);
+            server.once("error", onError);
+            server.listen({ port: candidatePort, host });
+        };
+        listen();
+    });
+}
 function getDefaultHost() {
     const host = bundleConfig.host === "::" ? "localhost" : bundleConfig.host;
     return `${host}:${bundleConfig.port}`;
