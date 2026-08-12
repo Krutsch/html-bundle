@@ -178,12 +178,27 @@ async function build(files, firstRun = true) {
                 const html = await minifyHTML(file, getBuildPath(file));
                 serverSentEvents?.({ type: "html", file, html, previousHtml });
             }
-            else if (/\.(jsx?|tsx?)$/.test(file)) {
+            else if (/\.(jsx?|tsx?)$/.test(file) || file.endsWith(".json")) {
                 // A module change alters the inlined output of whichever page(s) import
                 // it. Rebuild every page, then emit only the pages whose HTML actually
                 // changed; the client diff re-runs just the scripts that differ, so
                 // unrelated pages keep their state.
-                inlineFiles.add(file);
+                if (file.endsWith(".json")) {
+                    if (handlerFile) {
+                        try {
+                            await limitHandler(() => runHandler(file));
+                        }
+                        catch (err) {
+                            console.error(err);
+                        }
+                    }
+                    else {
+                        await fileCopy(file);
+                    }
+                }
+                else {
+                    inlineFiles.add(file);
+                }
                 for (const htmlFile of htmlFiles) {
                     await writeInlineScripts(htmlFile);
                 }

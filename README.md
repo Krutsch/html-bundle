@@ -58,6 +58,7 @@ With `--hmr`, every change is pushed over a single Server-Sent-Events connection
 - **HTML** (text, attributes, inline `<style>`) is diffed and patched in place. Only the `<script>`s whose code actually changed are re-executed, so unrelated state is preserved. Inserting or removing surrounding markup keeps dynamically rendered/fetched content intact.
 - **CSS** (linked or inline) and **assets** (images, etc.) are swapped by cache-busting the matching element — no reload.
 - **TS/JS modules** are re-bundled; the page(s) that inline them are re-emitted and hot-patched.
+- **JSON** imported by inline TS/JS is bundled by esbuild. JSON changes rebuild pages and hot-patch changed HTML; changes with no changed page trigger a full reload.
 - **Dead ends** — a change with no owning page (e.g. a web-worker entry) or a deleted file — trigger a single debounced **full page reload**, so you never get stuck on a stale view.
 
 Composed apps (pages that fetch and render other pages) are supported: every live page shares one connection and only its own region is patched. After HMR operations the `popstate` event is dispatched to nudge SPA routers.
@@ -122,7 +123,7 @@ export default {
 
 ## Concept
 
-The bundler always globs all HTML, CSS and TS/JS files from the `src` (config) directory and processes them to the `build` (config) directory. PostCSS is being used for CSS files and inline styles, html-minifier-terser for HTML and esbuild to bundle, minify, etc. for inline and referenced TS/JS. Server-sent events and [hydro-js](https://github.com/Krutsch/hydro-js) are used for HMR. In order to trigger SPA Routers, the popstate event is being triggered after HMR Operations.
+The bundler always globs files from the `src` (config) directory. HTML, CSS, and TS/JS are processed into the `build` (config) directory; unsupported files, including JSON, are copied unchanged by default or passed to the custom handler. JSON imported by inline TS/JS is bundled by esbuild. `<script type="importmap">` and `<script type="application/ld+json">` blocks are preserved and are not bundled. Server-sent events and [hydro-js](https://github.com/Krutsch/hydro-js) are used for HMR. In order to trigger SPA Routers, the popstate event is being triggered after HMR Operations.
 
 ## Example hydro-js
 

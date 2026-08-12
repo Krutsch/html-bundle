@@ -39,13 +39,13 @@ function waitForListening(child, ms = 15000) {
   });
 }
 
-function subscribe(events) {
+function subscribe(events, port = PORT) {
   // `listen()` logs "Server listening" before the socket is actually bound, so
   // the first connect can be refused — retry until the stream is open.
   return new Promise((resolve, reject) => {
     let attempts = 0;
     const tryConnect = () => {
-      const req = http.get(`http://127.0.0.1:${PORT}/hmr`, (res) => {
+      const req = http.get(`http://127.0.0.1:${port}/hmr`, (res) => {
         res.setEncoding("utf8");
         let buffer = "";
         res.on("data", (chunk) => {
@@ -417,5 +417,73 @@ test("HMR server emits typed events and funnels module edits to owning pages", a
   assert.ok(
     events.every((e) => typeof e.type === "string"),
     "every event carries a type",
+  );
+});
+
+test("HMR server rebuilds pages when imported JSON changes", async (t) => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "html-bundle-json-hmr-"));
+  t.after(() => rm(cwd, { force: true, recursive: true }));
+  await mkdir(path.join(cwd, "src"), { recursive: true });
+
+  await writeFile(
+    path.join(cwd, "bundle.config.js"),
+    `export default { port: ${PORT + 1}, host: "127.0.0.1", deletePrev: true };\n`,
+  );
+  await writeFile(
+    path.join(cwd, "src", "index.html"),
+    `<!DOCTYPE html>
+<html>
+  <head>
+    <title>JSON fixture</title>
+    <script type="module">
+      import data from "./data.json" with { type: "json" };
+      document.body.dataset.value = data.value;
+    </script>
+  </head>
+  <body><main>JSON fixture</main></body>
+</html>`,
+  );
+  const dataPath = path.join(cwd, "src", "data.json");
+  await writeFile(dataPath, JSON.stringify({ value: "JSON_FIXTURE_OLD" }));
+
+  const server = spawn(process.execPath, [bundlePath, "--hmr"], { cwd });
+  t.after(() => server.kill("SIGKILL"));
+  server.stderr.on("data", () => {});
+
+  await waitForListening(server);
+  const initialHtml = await readFile(
+    path.join(cwd, "build", "index.html"),
+    "utf8",
+  );
+  assert.match(initialHtml, /JSON_FIXTURE_OLD/);
+
+  const events = [];
+  const req = await subscribe(events, PORT + 1);
+  t.after(() => req.destroy());
+  await wait(300);
+
+  const beforeEdit = events.length;
+  await writeFile(dataPath, JSON.stringify({ value: "JSON_FIXTURE_NEW" }));
+
+  const jsonEvent = await until(() =>
+    events
+      .slice(beforeEdit)
+      .find(
+        (event) => event.type === "html" && event.file === "src/index.html",
+      ),
+  );
+  assert.ok(jsonEvent, "JSON change should emit an html event for index.html");
+  assert.match(jsonEvent.html, /JSON_FIXTURE_NEW/);
+  assert.doesNotMatch(jsonEvent.html, /JSON_FIXTURE_OLD/);
+
+  const rebuiltHtml = await readFile(
+    path.join(cwd, "build", "index.html"),
+    "utf8",
+  );
+  assert.match(rebuiltHtml, /JSON_FIXTURE_NEW/);
+  assert.doesNotMatch(rebuiltHtml, /JSON_FIXTURE_OLD/);
+  assert.deepEqual(
+    JSON.parse(await readFile(path.join(cwd, "build", "data.json"), "utf8")),
+    { value: "JSON_FIXTURE_NEW" },
   );
 });
