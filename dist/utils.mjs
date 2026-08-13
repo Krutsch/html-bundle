@@ -5,6 +5,7 @@ import express from "express";
 import httpolyglot from "httpolyglot";
 import postcssrc from "postcss-load-config";
 import cssnano from "cssnano";
+import { randomUUID } from "crypto";
 import { parse, parseFragment, serialize } from "parse5";
 import { createScript, getTagName, findElement } from "@web/parse5-utils";
 export const bundleConfig = await getBundleConfig();
@@ -31,6 +32,7 @@ export function getBuildPath(file) {
     return file.replace(`${bundleConfig.src}/`, `${bundleConfig.build}/`);
 }
 const CONNECTIONS = new Set(); // In order to send the HMR information
+const HMR_SERVER_ID = randomUUID();
 export let serverSentEvents;
 export async function createDefaultServer(isSecure) {
     const router = express.Router();
@@ -53,6 +55,7 @@ export async function createDefaultServer(isSecure) {
         reply.setHeader("Cache-Control", "no-cache");
         !isSecure && reply.setHeader("Connection", "keep-alive");
         reply.flushHeaders();
+        reply.write(`data: ${JSON.stringify({ type: "connected", id: HMR_SERVER_ID })}\n\n`);
         CONNECTIONS.add(reply);
         req.on("close", () => {
             CONNECTIONS.delete(reply);

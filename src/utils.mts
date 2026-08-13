@@ -9,6 +9,7 @@ import express from "express";
 import httpolyglot from "httpolyglot";
 import postcssrc from "postcss-load-config";
 import cssnano from "cssnano";
+import { randomUUID } from "crypto";
 import { parse, parseFragment, serialize } from "parse5";
 import { createScript, getTagName, findElement } from "@web/parse5-utils";
 
@@ -46,12 +47,14 @@ export function getBuildPath(file: string) {
 // client dispatches on `type`, so the server never needs the old .ts->.js file
 // renaming: module edits are delivered as "html" updates for the owning page(s).
 export type HMREvent =
+  | { type: "connected"; id: string }
   | { type: "html"; file: string; html?: string; previousHtml?: string }
   | { type: "css"; file: string }
   | { type: "asset"; file: string }
   | { type: "full-reload"; file: string };
 
 const CONNECTIONS = new Set<any>(); // In order to send the HMR information
+const HMR_SERVER_ID = randomUUID();
 export let serverSentEvents: undefined | ((event: HMREvent) => void);
 export async function createDefaultServer(
   isSecure: boolean,
@@ -80,6 +83,9 @@ export async function createDefaultServer(
     reply.setHeader("Cache-Control", "no-cache");
     !isSecure && reply.setHeader("Connection", "keep-alive");
     reply.flushHeaders();
+    reply.write(
+      `data: ${JSON.stringify({ type: "connected", id: HMR_SERVER_ID })}\n\n`,
+    );
 
     CONNECTIONS.add(reply);
     req.on("close", () => {

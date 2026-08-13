@@ -60,6 +60,7 @@ With `--hmr`, every change is pushed over a single Server-Sent-Events connection
 - **TS/JS modules** are re-bundled; the page(s) that inline them are re-emitted and hot-patched.
 - **JSON** imported by inline TS/JS is bundled by esbuild. JSON changes rebuild pages and hot-patch changed HTML; changes with no changed page trigger a full reload.
 - **Dead ends** — a change with no owning page (e.g. a web-worker entry) or a deleted file — trigger a single debounced **full page reload**, so you never get stuck on a stale view.
+- **Server restarts** are detected when the EventSource reconnects. The page reloads once so supervised SSR servers return fresh output.
 
 Composed apps (pages that fetch and render other pages) are supported: every live page shares one connection and only its own region is patched. After HMR operations the `popstate` event is dispatched to nudge SPA routers.
 

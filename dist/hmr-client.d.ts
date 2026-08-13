@@ -4,7 +4,10 @@ type HTMLMessage = {
     html: string;
     previousHtml?: string;
 };
-type HMRMessage = HTMLMessage | {
+type HMRMessage = {
+    type: "connected";
+    id: string;
+} | HTMLMessage | {
     type: "css";
     file: string;
 } | {

@@ -24,6 +24,7 @@ async function setup() {
   globalThis.HTMLHtmlElement = w.HTMLHtmlElement;
   globalThis.HTMLElement = w.HTMLElement;
   globalThis.Event = w.Event;
+  globalThis.sessionStorage = w.sessionStorage;
   globalThis.performance = w.performance ?? { now: () => Date.now() };
   globalThis.dispatchEvent = w.dispatchEvent
     ? w.dispatchEvent.bind(w)
@@ -31,11 +32,20 @@ async function setup() {
   w.scrollTo = () => {};
 
   let eventSourceCount = 0;
+  const eventSources = [];
   globalThis.EventSource = class {
+    listeners = new Map();
+
     constructor() {
       eventSourceCount++;
+      eventSources.push(this);
     }
-    addEventListener() {}
+    addEventListener(type, callback) {
+      this.listeners.set(type, callback);
+    }
+    emit(type, data) {
+      this.listeners.get(type)?.({ data: JSON.stringify(data) });
+    }
     close() {}
   };
 
@@ -62,6 +72,7 @@ async function setup() {
     window: w,
     document: w.document,
     loadPage,
+    eventSources,
     eventSourceCount: () => eventSourceCount,
     reloadCount: () => reloadCount,
   };
@@ -174,6 +185,31 @@ test("full-reload events trigger a debounced page reload", async () => {
     type: "full-reload",
     file: "src/@shared/workerCode.ts",
   });
+  await wait(30);
+
+  assert.equal(reloadCount(), 1);
+});
+
+test("reconnecting to a restarted HMR server reloads the page", async () => {
+  const { loadPage, eventSources, reloadCount } = await setup();
+  loadPage("src/index.html", "idx1");
+
+  eventSources[0].emit("message", { type: "connected", id: "server-a" });
+  eventSources[0].emit("message", { type: "connected", id: "server-a" });
+  await wait(30);
+  assert.equal(reloadCount(), 0, "same server must not reload the page");
+
+  eventSources[0].emit("message", { type: "connected", id: "server-b" });
+  await wait(30);
+  assert.equal(reloadCount(), 1, "new server must reload the page");
+});
+
+test("server identity survives an early full reload during restart", async () => {
+  const { loadPage, eventSources, reloadCount } = await setup();
+  sessionStorage.setItem("html-bundle-hmr-server-id", "server-a");
+  loadPage("src/index.html", "idx1");
+
+  eventSources[0].emit("message", { type: "connected", id: "server-b" });
   await wait(30);
 
   assert.equal(reloadCount(), 1);

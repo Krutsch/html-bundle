@@ -31,6 +31,7 @@ type HTMLMessage = {
   previousHtml?: string;
 };
 type HMRMessage =
+  | { type: "connected"; id: string }
   | HTMLMessage
   | { type: "css"; file: string }
   | { type: "asset"; file: string }
@@ -71,6 +72,7 @@ const ID = "__HMR_ID__";
 const SRC = "__HMR_SRC__";
 const REGION = '[data-hmr="__HMR_ID__"]';
 const CLIENT = 'script[data-hmr-client="__HMR_ID__"]';
+const SERVER_ID_KEY = "html-bundle-hmr-server-id";
 
 // The client is injected as the first <head> module so its hub and public API
 // exist before the page's own scripts run. But `window.isHMR` must NOT be
@@ -449,6 +451,7 @@ function createHub(src: string): Hub {
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   let reloadTimer: ReturnType<typeof setTimeout> | undefined;
   let shouldReconnect = true;
+  let serverId = getStoredServerId();
 
   const hub: Hub = {
     currentUnit: null,
@@ -468,7 +471,11 @@ function createHub(src: string): Hub {
       return store.get(file)!;
     },
     dispatch(message) {
-      if (message.type === "html") {
+      if (message.type === "connected") {
+        if (serverId !== undefined && serverId !== message.id) reloadPage();
+        serverId = message.id;
+        storeServerId(message.id);
+      } else if (message.type === "html") {
         const entry = registry.get(message.file);
         if (!entry) return;
         hub.currentUnit = message.file;
@@ -492,6 +499,20 @@ function createHub(src: string): Hub {
   function push<T>(map: Map<string, T[]>, key: string, value: T): void {
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(value);
+  }
+
+  function getStoredServerId(): string | undefined {
+    try {
+      return sessionStorage.getItem(SERVER_ID_KEY) || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  function storeServerId(id: string): void {
+    try {
+      sessionStorage.setItem(SERVER_ID_KEY, id);
+    } catch {}
   }
 
   function run(map: Map<string, Array<() => void>>, key: string): void {

@@ -9,6 +9,9 @@ export declare function fileCopy(file: string): Promise<void>;
 export declare function createDir(file: string): Promise<string | undefined>;
 export declare function getBuildPath(file: string): string;
 export type HMREvent = {
+    type: "connected";
+    id: string;
+} | {
     type: "html";
     file: string;
     html?: string;

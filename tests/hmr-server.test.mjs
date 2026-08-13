@@ -318,6 +318,17 @@ test("HMR server emits typed events and funnels module edits to owning pages", a
   t.after(() => secondReq.destroy());
   await wait(300);
 
+  const firstConnection = events.find((event) => event.type === "connected");
+  const secondConnection = secondClientEvents.find(
+    (event) => event.type === "connected",
+  );
+  assert.ok(firstConnection?.id, "HMR connection should identify the server");
+  assert.equal(
+    secondConnection?.id,
+    firstConnection.id,
+    "connections to one process should share a server id",
+  );
+
   // 1. Module edit funnels into an "html" update for the owning page.
   const beforeModule = events.length;
   await writeFile(modPath, `export const value: number = 2;\n`);

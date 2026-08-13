@@ -20,6 +20,7 @@ const ID = "__HMR_ID__";
 const SRC = "__HMR_SRC__";
 const REGION = '[data-hmr="__HMR_ID__"]';
 const CLIENT = 'script[data-hmr-client="__HMR_ID__"]';
+const SERVER_ID_KEY = "html-bundle-hmr-server-id";
 // The client is injected as the first <head> module so its hub and public API
 // exist before the page's own scripts run. But `window.isHMR` must NOT be
 // observable while those scripts execute for the first time: user code commonly
@@ -332,6 +333,7 @@ function createHub(src) {
     let reconnectTimer;
     let reloadTimer;
     let shouldReconnect = true;
+    let serverId = getStoredServerId();
     const hub = {
         currentUnit: null,
         lastHTML: new Map(),
@@ -351,7 +353,13 @@ function createHub(src) {
             return store.get(file);
         },
         dispatch(message) {
-            if (message.type === "html") {
+            if (message.type === "connected") {
+                if (serverId !== undefined && serverId !== message.id)
+                    reloadPage();
+                serverId = message.id;
+                storeServerId(message.id);
+            }
+            else if (message.type === "html") {
                 const entry = registry.get(message.file);
                 if (!entry)
                     return;
@@ -380,6 +388,20 @@ function createHub(src) {
         if (!map.has(key))
             map.set(key, []);
         map.get(key).push(value);
+    }
+    function getStoredServerId() {
+        try {
+            return sessionStorage.getItem(SERVER_ID_KEY) || undefined;
+        }
+        catch {
+            return undefined;
+        }
+    }
+    function storeServerId(id) {
+        try {
+            sessionStorage.setItem(SERVER_ID_KEY, id);
+        }
+        catch { }
     }
     function run(map, key) {
         const callbacks = map.get(key);
