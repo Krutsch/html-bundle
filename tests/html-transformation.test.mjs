@@ -171,6 +171,7 @@ test("HTML transformation injects stable HMR clients for full documents and frag
   assert.match(fullHTML, /new EventSource\("\/hmr"\)/);
   assert.match(fragmentHTML, /<main data-hmr="[^"]+">Hi<\/main>/);
   assert.match(fragmentHTML, /<section data-hmr="[^"]+">There<\/section>/);
+  assert.doesNotMatch(fragmentHTML, /<\/?(?:html|head|body)(?:\s|>)/i);
   assert.equal(
     fragmentHTML.match(/data-hmr="([^"]+)"/)[1],
     fragmentHTML.match(/data-hmr="([^"]+)"/g)[1].match(/"([^"]+)"/)[1],

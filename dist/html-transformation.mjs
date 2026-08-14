@@ -136,7 +136,7 @@ export function addHMRCode(html, file, ast, src = "__HMR_SRC__") {
     const id = hmrIds.get(file);
     const script = createScript({ type: "module", "data-hmr-client": id }, buildHMRClient(file, id, src));
     let DOM;
-    if (html.includes("<!DOCTYPE html>") || html.includes("<html")) {
+    if (isDocumentHTML(html)) {
         DOM = ast || parse(html);
         const headNode = findElement(DOM, (e) => getTagName(e) === "head");
         insertHeadClient(headNode, script);
@@ -150,9 +150,11 @@ export function addHMRCode(html, file, ast, src = "__HMR_SRC__") {
     return serialize(DOM);
 }
 function parseHTML(html) {
-    return html.includes("<!DOCTYPE html>") || html.includes("<html")
-        ? parse(html)
-        : parseFragment(html);
+    return isDocumentHTML(html) ? parse(html) : parseFragment(html);
+}
+function isDocumentHTML(html) {
+    const trimmed = html.trimStart().toLowerCase();
+    return trimmed.startsWith("<!doctype html") || trimmed.startsWith("<html");
 }
 function buildHMRClient(file, id, src) {
     return hmrClientTemplate

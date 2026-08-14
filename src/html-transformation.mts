@@ -212,7 +212,7 @@ export function addHMRCode(
   );
 
   let DOM: ParsedHTML;
-  if (html.includes("<!DOCTYPE html>") || html.includes("<html")) {
+  if (isDocumentHTML(html)) {
     DOM = ast || parse(html);
     const headNode = findElement(DOM as Node, (e) => getTagName(e) === "head");
     insertHeadClient(headNode as Node, script);
@@ -230,9 +230,12 @@ export function addHMRCode(
 }
 
 function parseHTML(html: string): ParsedHTML {
-  return html.includes("<!DOCTYPE html>") || html.includes("<html")
-    ? parse(html)
-    : parseFragment(html);
+  return isDocumentHTML(html) ? parse(html) : parseFragment(html);
+}
+
+function isDocumentHTML(html: string): boolean {
+  const trimmed = html.trimStart().toLowerCase();
+  return trimmed.startsWith("<!doctype html") || trimmed.startsWith("<html");
 }
 
 function buildHMRClient(file: string, id: string, src: string): string {
