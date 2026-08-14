@@ -10,32 +10,30 @@
 // are literal, avoiding the template-literal escape corruption a generated string
 // is prone to.
 import { render as hydroRender, html, setShouldSetReactivity } from "hydro-js";
+import { decodeHMRMessage, type HMRMessage } from "./hmr-protocol.mjs";
+import { createDOMPatcher, type DOMRenderer } from "./dom-patch.mjs";
 
 // hydro-js's `render` is typed against its own `html()` output; this client
 // feeds it arbitrary DOM nodes and uses `false` for `where` (a detached render),
 // so widen the signature. The assertion is type-only — esbuild strips it and the
 // runtime binding stays hydro-js's `render`.
-const render = hydroRender as unknown as (
-  elem: Node,
-  where?: Node | string | false,
-  shouldSchedule?: boolean,
-) => void;
+const renderer: DOMRenderer = {
+  parse: parseMarkup,
+  render: hydroRender as unknown as DOMRenderer["render"],
+  withoutReactivity<T>(parse: () => T): T {
+    setShouldSetReactivity(false);
+    try {
+      return parse();
+    } finally {
+      setShouldSetReactivity(true);
+    }
+  },
+};
 
 // HMR messages delivered over the shared EventSource; mirrors the server's
 // HMREvent union (utils.mts). Kept local so the browser runtime never pulls the
 // Node build's module graph into type-checking.
-type HTMLMessage = {
-  type: "html";
-  file: string;
-  html: string;
-  previousHtml?: string;
-};
-type HMRMessage =
-  | { type: "connected"; id: string }
-  | HTMLMessage
-  | { type: "css"; file: string }
-  | { type: "asset"; file: string }
-  | { type: "full-reload"; file: string };
+type HTMLMessage = Extract<HMRMessage, { type: "html" }>;
 
 type PatchHandler = { id?: string; patch: (message: HTMLMessage) => void };
 
@@ -124,68 +122,22 @@ hub.register(FILE, ID, { patch });
 
 // --- per-page patching (closes over this page's own hydro-js instance) --------
 
+const domPatcher = createDOMPatcher(renderer, {
+  regionSelector: REGION,
+  clientSelector: CLIENT,
+  getLastHTML: () => hub.lastHTML.get(FILE),
+  setLastHTML: (htmlText) => hub.lastHTML.set(FILE, htmlText),
+  bust,
+});
+
 function patch(message: HTMLMessage): void {
   const previousScroll = window.scrollY;
-  if (isFullDocument(message.html)) {
-    patchDocument(message.previousHtml, message.html);
-    if (FILE === SRC + "/index.html") {
-      dispatchEvent(new Event("popstate"));
-    }
-  } else {
-    patchFragment(message);
+  const fullDocument = isFullDocument(message.html);
+  domPatcher.patch(message, document);
+  if (fullDocument && FILE === SRC + "/index.html") {
+    dispatchEvent(new Event("popstate"));
   }
   window.scrollTo(0, previousScroll);
-}
-
-function patchFragment(message: HTMLMessage): void {
-  const incoming = parseHTML(message.html);
-  // hydro-js returns a DocumentFragment for multi-root markup but the element
-  // itself for a single root — normalise to a flat list of top-level nodes.
-  const nextNodes = topLevelNodes(incoming);
-  const regions = Array.from(document.querySelectorAll(REGION));
-
-  if (!regions.length) {
-    hub.lastHTML.set(FILE, message.html);
-    return;
-  }
-
-  const previousText = message.previousHtml || hub.lastHTML.get(FILE);
-  const previousNodes = previousText
-    ? topLevelNodes(parseHTML(previousText))
-    : [];
-
-  // Replace each existing region in place, drop the surplus, append the rest.
-  regions.forEach((where, index) => {
-    if (index < nextNodes.length) {
-      const previousNode = previousNodes[index];
-      const nextNode = nextNodes[index];
-      if (previousNode && sameNodeIdentity(previousNode, nextNode)) {
-        patchNode(previousNode, nextNode, where);
-      } else {
-        render(cloneForRender(nextNode), where, false);
-      }
-    } else {
-      where.remove();
-    }
-  });
-
-  for (let rest = regions.length; rest < nextNodes.length; rest++) {
-    const template = document.createElement("template");
-    const regionList = Array.from(document.querySelectorAll(REGION));
-    const lastRegion = regionList[regionList.length - 1];
-    lastRegion.after(template);
-    render(cloneForRender(nextNodes[rest]), template, false);
-    template.remove();
-  }
-
-  hub.lastHTML.set(FILE, message.html);
-}
-
-function topLevelNodes(parsed: Element | DocumentFragment | Text): Node[] {
-  return parsed.nodeType === Node.DOCUMENT_FRAGMENT_NODE ||
-    parsed.nodeType === Node.DOCUMENT_NODE
-    ? Array.from(parsed.childNodes)
-    : [parsed];
 }
 
 function isFullDocument(htmlText: string): boolean {
@@ -193,246 +145,8 @@ function isFullDocument(htmlText: string): boolean {
   return trimmed.startsWith("<!doctype html") || trimmed.startsWith("<html");
 }
 
-function parseHTML(htmlText: string): Element | DocumentFragment | Text {
-  try {
-    return html`${htmlText}`;
-  } catch {
-    setShouldSetReactivity(false);
-    const parsed = html`${htmlText}`;
-    setShouldSetReactivity(true);
-    return parsed;
-  }
-}
-
-function patchDocument(
-  previousHtml: string | undefined,
-  nextHtml: string,
-): void {
-  const previousText =
-    previousHtml ||
-    hub.lastHTML.get(FILE) ||
-    document.documentElement.outerHTML;
-  const previousDocument = getDocumentParts(parseHTML(previousText));
-  const nextDocument = getDocumentParts(parseHTML(nextHtml));
-
-  if (!previousDocument.html || !nextDocument.html) {
-    render(parseHTML(nextHtml), document.documentElement, false);
-    hub.lastHTML.set(FILE, nextHtml);
-    return;
-  }
-
-  patchAttributes(document.documentElement, nextDocument.html);
-  if (previousDocument.head && nextDocument.head && document.head) {
-    patchChildren(previousDocument.head, nextDocument.head, document.head);
-    patchAttributes(document.head, nextDocument.head);
-  }
-  if (previousDocument.body && nextDocument.body && document.body) {
-    patchChildren(previousDocument.body, nextDocument.body, document.body);
-    patchAttributes(document.body, nextDocument.body);
-  }
-
-  hub.lastHTML.set(FILE, nextHtml);
-}
-
-function getDocumentParts(parsed: Element | DocumentFragment | Text): {
-  html: Element;
-  head: Element | null;
-  body: Element | null;
-} {
-  const htmlNode = (
-    parsed instanceof HTMLHtmlElement
-      ? parsed
-      : (parsed as Element).querySelector?.("html") || parsed
-  ) as Element;
-  return {
-    html: htmlNode,
-    head: htmlNode.querySelector?.("head"),
-    body: htmlNode.querySelector?.("body"),
-  };
-}
-
-function patchChildren(
-  previousParent: Node,
-  nextParent: Node,
-  liveParent: Node,
-): void {
-  const previousNodes = comparableNodes(previousParent);
-  const nextNodes = comparableNodes(nextParent);
-  let previousIndex = 0;
-  let nextIndex = 0;
-  let liveIndex = 0;
-
-  while (nextIndex < nextNodes.length) {
-    const previousNode = previousNodes[previousIndex];
-    const nextNode = nextNodes[nextIndex];
-    const liveNode = nextLiveNode(liveParent, liveIndex);
-
-    if (!liveNode) {
-      (liveParent as Element).append(cloneForRender(nextNode));
-      nextIndex++;
-      liveIndex++;
-      continue;
-    }
-
-    if (!previousNode) {
-      render(cloneForRender(nextNode), liveNode, false);
-      nextIndex++;
-      liveIndex++;
-      continue;
-    }
-
-    const previousMatch = findStaticMatch(
-      previousNodes,
-      nextNode,
-      previousIndex + 1,
-    );
-    const nextMatch = findStaticMatch(nextNodes, previousNode, nextIndex + 1);
-
-    if (previousMatch !== -1 && nextMatch === -1) {
-      liveNode.remove();
-      previousIndex++;
-      continue;
-    }
-
-    if (nextMatch !== -1) {
-      liveNode.before(cloneForRender(nextNode));
-      nextIndex++;
-      liveIndex++;
-      continue;
-    }
-
-    if (sameNodeIdentity(previousNode, nextNode)) {
-      patchNode(previousNode, nextNode, liveNode);
-      previousIndex++;
-      nextIndex++;
-      liveIndex++;
-      continue;
-    }
-
-    render(cloneForRender(nextNode), liveNode, false);
-    previousIndex++;
-    nextIndex++;
-    liveIndex++;
-  }
-
-  while (
-    previousIndex < previousNodes.length &&
-    nextLiveNode(liveParent, liveIndex)
-  ) {
-    nextLiveNode(liveParent, liveIndex)!.remove();
-    previousIndex++;
-  }
-}
-
-function patchNode(previousNode: Node, nextNode: Node, liveNode: Node): void {
-  if (sameStaticNode(previousNode, nextNode)) return;
-  if (
-    previousNode.nodeType !== nextNode.nodeType ||
-    liveNode.nodeType !== nextNode.nodeType
-  ) {
-    render(cloneForRender(nextNode), liveNode, false);
-    return;
-  }
-  if (nextNode.nodeType === Node.TEXT_NODE) {
-    liveNode.nodeValue = nextNode.nodeValue;
-    return;
-  }
-  if (nextNode.nodeType !== Node.ELEMENT_NODE) {
-    render(cloneForRender(nextNode), liveNode, false);
-    return;
-  }
-  if ((nextNode as Element).localName === "script") {
-    patchScript(previousNode, nextNode as Element, liveNode);
-    return;
-  }
-  patchAttributes(liveNode as Element, nextNode as Element);
-  patchChildren(previousNode, nextNode, liveNode);
-}
-
-// Re-running only the scripts whose content actually changed is the "hot swap":
-// unchanged scripts keep their state, changed ones re-execute with fresh code.
-function patchScript(
-  previousScript: Node,
-  nextScript: Element,
-  liveScript: Node,
-): void {
-  if (previousScript.isEqualNode(nextScript)) return;
-  const clone = cloneScript(nextScript);
-  const source = clone.getAttribute("src");
-  if (source) clone.setAttribute("src", bust(source));
-  render(clone, liveScript, false);
-}
-
-function cloneForRender(node: Node): Node {
-  if (
-    node.nodeType === Node.ELEMENT_NODE &&
-    (node as Element).localName === "script"
-  ) {
-    return cloneScript(node as Element);
-  }
-  return node.cloneNode(true);
-}
-
-// Cloning via document.createElement forces the browser to (re-)execute the
-// script; a plain cloneNode of a parsed <script> would not run.
-function cloneScript(script: Element): HTMLScriptElement {
-  const clone = document.createElement("script");
-  for (const attr of Array.from(script.attributes)) {
-    clone.setAttribute(attr.name, attr.value);
-  }
-  clone.textContent = script.textContent;
-  return clone;
-}
-
-function patchAttributes(liveElement: Element, nextElement: Element): void {
-  for (const attr of Array.from(liveElement.attributes)) {
-    if (!nextElement.hasAttribute(attr.name))
-      liveElement.removeAttribute(attr.name);
-  }
-  for (const attr of Array.from(nextElement.attributes)) {
-    if (liveElement.getAttribute(attr.name) !== attr.value) {
-      liveElement.setAttribute(attr.name, attr.value);
-    }
-  }
-}
-
-function sameStaticNode(previousNode: Node, nextNode: Node): boolean {
-  return cloneComparable(previousNode).isEqualNode(cloneComparable(nextNode));
-}
-
-function sameNodeIdentity(previousNode: Node, nextNode: Node): boolean {
-  return (
-    previousNode.nodeType === nextNode.nodeType &&
-    previousNode.nodeName === nextNode.nodeName
-  );
-}
-
-function findStaticMatch(nodes: Node[], needle: Node, start: number): number {
-  for (let index = start; index < nodes.length; index++) {
-    if (sameStaticNode(nodes[index], needle)) return index;
-  }
-  return -1;
-}
-
-// Ignore the injected HMR client script when diffing so it never counts as a
-// real change.
-function cloneComparable(node: Node): Node {
-  const clone = node.cloneNode(true) as Element;
-  clone.querySelectorAll?.(CLIENT).forEach((script) => script.remove());
-  if (clone.matches?.(CLIENT)) clone.remove();
-  return clone;
-}
-
-function comparableNodes(parent: Node): ChildNode[] {
-  return Array.from(parent.childNodes).filter((node) => {
-    return !(
-      node.nodeType === Node.ELEMENT_NODE && (node as Element).matches?.(CLIENT)
-    );
-  });
-}
-
-function nextLiveNode(parent: Node, index: number): ChildNode | undefined {
-  return comparableNodes(parent)[index];
+function parseMarkup(htmlText: string): ReturnType<DOMRenderer["parse"]> {
+  return html`${htmlText}`;
 }
 
 function bust(url: string): string {
@@ -604,12 +318,8 @@ function createHub(src: string): Hub {
     shouldReconnect = true;
     source = new EventSource("/hmr");
     source.addEventListener("message", (event) => {
-      let message;
-      try {
-        message = JSON.parse(event.data);
-      } catch {
-        return;
-      }
+      const message = decodeHMRMessage(event.data);
+      if (!message) return;
       hub.dispatch(message);
     });
     source.addEventListener("error", () => {

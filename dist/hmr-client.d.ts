@@ -1,22 +1,7 @@
-type HTMLMessage = {
+import { type HMRMessage } from "./hmr-protocol.mjs";
+type HTMLMessage = Extract<HMRMessage, {
     type: "html";
-    file: string;
-    html: string;
-    previousHtml?: string;
-};
-type HMRMessage = {
-    type: "connected";
-    id: string;
-} | HTMLMessage | {
-    type: "css";
-    file: string;
-} | {
-    type: "asset";
-    file: string;
-} | {
-    type: "full-reload";
-    file: string;
-};
+}>;
 type Hub = {
     currentUnit: string | null;
     lastHTML: Map<string, string>;

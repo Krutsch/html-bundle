@@ -3,29 +3,14 @@ import type { Router } from "express-serve-static-core";
 import { type Server } from "http";
 import type { Server as HTTPSServer } from "https";
 import postcssrc from "postcss-load-config";
-import { parse, parseFragment } from "parse5";
+import { type HMRMessage } from "./hmr-protocol.mjs";
+import { type ParsedHTML } from "./html-transformation.mjs";
 export declare const bundleConfig: Config;
+export declare function addHMRCode(html: string, file: string, ast?: ParsedHTML): string;
 export declare function fileCopy(file: string): Promise<void>;
 export declare function createDir(file: string): Promise<string | undefined>;
 export declare function getBuildPath(file: string): string;
-export type HMREvent = {
-    type: "connected";
-    id: string;
-} | {
-    type: "html";
-    file: string;
-    html?: string;
-    previousHtml?: string;
-} | {
-    type: "css";
-    file: string;
-} | {
-    type: "asset";
-    file: string;
-} | {
-    type: "full-reload";
-    file: string;
-};
+export type HMREvent = HMRMessage;
 export declare let serverSentEvents: undefined | ((event: HMREvent) => void);
 export declare function createDefaultServer(isSecure: boolean): Promise<[Router, Server | HTTPSServer]>;
 export declare function listenOnAvailablePort(server: Server | HTTPSServer, port: number, host?: string): Promise<number>;
@@ -34,4 +19,3 @@ export declare function getPostCSSConfig(): Promise<postcssrc.Result | {
     options: {};
     file: string;
 }>;
-export declare function addHMRCode(html: string, file: string, ast?: ReturnType<typeof parse | typeof parseFragment>): string;

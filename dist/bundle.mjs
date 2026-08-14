@@ -12,10 +12,10 @@ import pLimit from "p-limit";
 import Beasties from "beasties";
 import { minify } from "html-minifier-terser";
 import { watch } from "chokidar";
-import { serialize, parse, parseFragment } from "parse5";
-import { getTagName, findElements } from "@web/parse5-utils";
 import awaitSpawn from "await-spawn";
-import { fileCopy, createDefaultServer, getPostCSSConfig, getBuildPath, createDir, bundleConfig, serverSentEvents, addHMRCode, listenOnAvailablePort, } from "./utils.mjs";
+import { fileCopy, createDefaultServer, getPostCSSConfig, getBuildPath, createDir, bundleConfig, serverSentEvents, listenOnAvailablePort, } from "./utils.mjs";
+import { HTMLTransformer } from "./html-transformation.mjs";
+import { createHTMLRebuildEvents, getBuildImpact } from "./build-impact.mjs";
 const isHMR = process.argv.includes("--hmr") || bundleConfig.hmr;
 const isCritical = process.argv.includes("--isCritical") || bundleConfig.isCritical;
 const beasties = new Beasties({
@@ -30,13 +30,17 @@ const handlerFile = process.argv.includes("--handler")
 const defaultHandlerConcurrency = availableParallelism();
 const handlerConcurrency = getHandlerConcurrency();
 const limitHandler = pLimit(handlerConcurrency);
+const htmlTransformer = new HTMLTransformer({
+    src: bundleConfig.src,
+    build: bundleConfig.build,
+    hmr: Boolean(isHMR),
+});
 process.env.NODE_ENV = isHMR ? "development" : "production"; // just in case other tools are using it
 let timer = performance.now();
 let { plugins, options, file: postcssFile } = await getPostCSSConfig();
 let CSSprocessor = postcss(plugins);
 let router;
 const inlineFiles = new Set();
-const TEMPLATE_LITERAL_MINIFIER = /\n\s+/g;
 const INLINE_BUNDLE_FILE = /-bundle-\d+.tsx$/;
 const SUPPORTED_FILES = /\.(html|css|jsx?|tsx?)$/;
 const CONFIG_EXTENSIONS = ["js", "mjs", "cjs", "ts", "mts", "cts"];
@@ -45,16 +49,15 @@ if (bundleConfig.deletePrev) {
     await rm(bundleConfig.build, { force: true, recursive: true });
 }
 async function cleanupStaleInlineBundleFiles() {
-    const staleFiles = await glob(`${bundleConfig.src}/**/*-bundle-*.tsx`);
-    await Promise.all(staleFiles.map((file) => rm(file.replaceAll(sep, "/"), { force: true })));
+    await htmlTransformer.cleanupStaleInlineBundleFiles();
 }
 async function bundleInlineCode() {
     try {
         await minifyCode();
     }
     finally {
-        const generatedFiles = Array.from(inlineFiles).filter((file) => INLINE_BUNDLE_FILE.test(file));
-        await Promise.all(generatedFiles.map((file) => rm(file, { force: true })));
+        const generatedFiles = htmlTransformer.generatedFiles();
+        await htmlTransformer.cleanupGeneratedFiles();
         generatedFiles.forEach((file) => inlineFiles.delete(file));
     }
 }
@@ -152,6 +155,10 @@ async function build(files, firstRun = true) {
             if (fileIndex !== -1)
                 files.splice(fileIndex, 1);
             inlineFiles.delete(file);
+            await htmlTransformer.remove(file);
+            htmlTransformer
+                .takeRemovedFiles()
+                .forEach((removedFile) => inlineFiles.delete(removedFile));
             const buildFile = getBuildPath(file).replace(/\.(jsx?|tsx?)$/, ".js");
             try {
                 await rm(buildFile);
@@ -165,10 +172,13 @@ async function build(files, firstRun = true) {
             console.log(`⚡ deleted ${file} from the build`);
         });
         async function rebuild(file) {
+            const impact = getBuildImpact(file);
             // Rebuild all CSS because a change in any file might need to trigger PostCSS zu rebuild(e.g. Tailwind CSS)
-            await rebuildCSS(files.filter((file) => file.endsWith(".css")));
+            if (impact.rebuildCSS) {
+                await rebuildCSS(files.filter((file) => file.endsWith(".css")));
+            }
             const htmlFiles = files.filter((f) => f.endsWith(".html"));
-            if (file.endsWith(".html")) {
+            if (impact.kind === "html") {
                 const previousHtml = builtHTMLCache.get(file);
                 // To refill the inlineFiles needed to build JS
                 for (const htmlFile of htmlFiles) {
@@ -178,12 +188,12 @@ async function build(files, firstRun = true) {
                 const html = await minifyHTML(file, getBuildPath(file));
                 serverSentEvents?.({ type: "html", file, html, previousHtml });
             }
-            else if (/\.(jsx?|tsx?)$/.test(file) || file.endsWith(".json")) {
+            else if (impact.kind === "module" || impact.kind === "json") {
                 // A module change alters the inlined output of whichever page(s) import
                 // it. Rebuild every page, then emit only the pages whose HTML actually
                 // changed; the client diff re-runs just the scripts that differ, so
                 // unrelated pages keep their state.
-                if (file.endsWith(".json")) {
+                if (impact.copySource) {
                     if (handlerFile) {
                         try {
                             await limitHandler(() => runHandler(file));
@@ -203,25 +213,17 @@ async function build(files, firstRun = true) {
                     await writeInlineScripts(htmlFile);
                 }
                 await bundleInlineCode();
-                let didEmit = false;
+                const outputs = [];
                 for (const htmlFile of htmlFiles) {
                     const previousHtml = builtHTMLCache.get(htmlFile);
                     const html = await minifyHTML(htmlFile, getBuildPath(htmlFile));
-                    if (html !== previousHtml) {
-                        didEmit = true;
-                        serverSentEvents?.({
-                            type: "html",
-                            file: htmlFile,
-                            html,
-                            previousHtml,
-                        });
-                    }
+                    outputs.push({ file: htmlFile, html, previousHtml });
                 }
-                if (!didEmit) {
-                    serverSentEvents?.({ type: "full-reload", file });
+                for (const event of createHTMLRebuildEvents(file, outputs)) {
+                    serverSentEvents?.(event);
                 }
             }
-            else if (file.endsWith(".css")) {
+            else if (impact.event === "css") {
                 serverSentEvents?.({ type: "css", file });
             }
             else {
@@ -345,81 +347,19 @@ async function minifyCode() {
         throw err;
     }
 }
-const htmlFilesCache = new Map();
 const builtHTMLCache = new Map();
 async function writeInlineScripts(file) {
-    let fileText = await readFile(file, { encoding: "utf-8" });
-    let DOM;
-    if (fileText.includes("<!DOCTYPE html>") || fileText.includes("<html")) {
-        DOM = parse(fileText);
-    }
-    else {
-        DOM = parseFragment(fileText);
-    }
-    if (isHMR) {
-        fileText = addHMRCode(fileText, file, DOM);
-    }
-    htmlFilesCache.set(file, [fileText, DOM]);
-    const scripts = findElements(DOM, (e) => getTagName(e) === "script");
-    for (let index = 0; index < scripts.length; index++) {
-        const script = scripts[index];
-        const scriptTextNode = script.childNodes[0];
-        const isReferencedScript = script.attrs.find((a) => a.name === "src");
-        const type = script.attrs.find((a) => a.name === "type");
-        const scriptContent = scriptTextNode?.value;
-        if (!scriptContent ||
-            isReferencedScript ||
-            type?.value === "importmap" ||
-            type?.value === "application/ld+json")
-            continue;
-        const jsFile = file.replace(".html", `-bundle-${index}.tsx`);
-        inlineFiles.add(jsFile);
-        await writeFile(jsFile, scriptContent);
-    }
+    const transformation = await htmlTransformer.prepare(file);
+    htmlTransformer
+        .takeRemovedFiles()
+        .forEach((removedFile) => inlineFiles.delete(removedFile));
+    transformation.scripts.forEach(({ sourceFile }) => inlineFiles.add(sourceFile));
 }
 async function minifyHTML(file, buildFile) {
-    let fileText, DOM;
-    if (htmlFilesCache.has(file)) {
-        const cache = htmlFilesCache.get(file);
-        fileText = cache[0];
-        DOM = cache[1];
-    }
-    else {
-        fileText = await readFile(file, { encoding: "utf-8" });
-        if (fileText.includes("<!DOCTYPE html>") || fileText.includes("<html")) {
-            DOM = parse(fileText);
-        }
-        else {
-            DOM = parseFragment(fileText);
-        }
-    }
-    // Minify Code
-    const scripts = findElements(DOM, (e) => getTagName(e) === "script");
-    for (let index = 0; index < scripts.length; index++) {
-        const script = scripts[index];
-        const scriptTextNode = script.childNodes[0];
-        const isReferencedScript = script.attrs.find((a) => a.name === "src");
-        const type = script.attrs.find((a) => a.name === "type");
-        if (!scriptTextNode?.value ||
-            isReferencedScript ||
-            type?.value === "importmap" ||
-            type?.value === "application/ld+json")
-            continue;
-        // Use bundled file
-        const buildInlineScript = buildFile.replace(".html", `-bundle-${index}.js`);
-        try {
-            const scriptContent = await readFile(buildInlineScript, {
-                encoding: "utf-8",
-            });
-            await rm(buildInlineScript);
-            scriptTextNode.value = scriptContent.replace(TEMPLATE_LITERAL_MINIFIER, " ");
-        }
-        catch { }
-    }
+    const transformation = htmlTransformer.get(file) || (await htmlTransformer.prepare(file));
+    await transformation.applyBundledScripts(buildFile);
     // Minify Inline Style
-    const styles = findElements(DOM, (e) => getTagName(e) === "style");
-    for (const style of styles) {
-        const node = style.childNodes[0];
+    for (const node of transformation.getInlineStyles()) {
         const styleContent = node?.value;
         if (!styleContent)
             continue;
@@ -434,7 +374,7 @@ async function minifyHTML(file, buildFile) {
             console.error(getErrorMessage(err));
         }
     }
-    fileText = serialize(DOM);
+    let fileText = transformation.serialize();
     // Minify HTML
     try {
         fileText = await minify(fileText, {

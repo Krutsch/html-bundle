@@ -1,4 +1,3 @@
-import type { Node } from "@web/parse5-utils";
 import type { Config } from "./bundle.mjs";
 import type { Router } from "express-serve-static-core";
 import { copyFile, mkdir, readFile } from "fs/promises";
@@ -9,24 +8,20 @@ import express from "express";
 import httpolyglot from "httpolyglot";
 import postcssrc from "postcss-load-config";
 import cssnano from "cssnano";
-import { randomUUID } from "crypto";
-import { parse, parseFragment, serialize } from "parse5";
-import { createScript, getTagName, findElement } from "@web/parse5-utils";
-
+import { createSSEAdapter } from "./hmr-sse.mjs";
+import { type HMRMessage } from "./hmr-protocol.mjs";
+import {
+  addHMRCode as transformHMRCode,
+  type ParsedHTML,
+} from "./html-transformation.mjs";
 export const bundleConfig = await getBundleConfig();
 
-// The HMR client runtime is authored in src/hmr-client.ts and compiled by tsc to
-// dist/hmr-client.js alongside this module (a real file, so its code is never
-// mangled by template-literal escaping). Read it once and substitute the per-page
-// tokens on demand in buildHMRClient().
-let hmrClientTemplate = "";
-try {
-  hmrClientTemplate = await readFile(
-    new URL("./hmr-client.js", import.meta.url),
-    "utf-8",
-  );
-} catch {
-  // Only needed when --hmr is active; addHMRCode tolerates an empty template.
+export function addHMRCode(
+  html: string,
+  file: string,
+  ast?: ParsedHTML,
+): string {
+  return transformHMRCode(html, file, ast, bundleConfig.src);
 }
 
 export function fileCopy(file: string) {
@@ -46,15 +41,8 @@ export function getBuildPath(file: string) {
 // Every change the watcher detects is normalised into one of these events. The
 // client dispatches on `type`, so the server never needs the old .ts->.js file
 // renaming: module edits are delivered as "html" updates for the owning page(s).
-export type HMREvent =
-  | { type: "connected"; id: string }
-  | { type: "html"; file: string; html?: string; previousHtml?: string }
-  | { type: "css"; file: string }
-  | { type: "asset"; file: string }
-  | { type: "full-reload"; file: string };
+export type HMREvent = HMRMessage;
 
-const CONNECTIONS = new Set<any>(); // In order to send the HMR information
-const HMR_SERVER_ID = randomUUID();
 export let serverSentEvents: undefined | ((event: HMREvent) => void);
 export async function createDefaultServer(
   isSecure: boolean,
@@ -78,30 +66,11 @@ export async function createDefaultServer(
   app.use(router);
   app.use(express.static(path.join(process.cwd(), bundleConfig.build)));
 
+  const sse = createSSEAdapter({ keepAlive: !isSecure });
+  serverSentEvents = sse.publish;
+
   router.get("/hmr", (req, reply) => {
-    reply.setHeader("Content-Type", "text/event-stream");
-    reply.setHeader("Cache-Control", "no-cache");
-    !isSecure && reply.setHeader("Connection", "keep-alive");
-    reply.flushHeaders();
-    reply.write(
-      `data: ${JSON.stringify({ type: "connected", id: HMR_SERVER_ID })}\n\n`,
-    );
-
-    CONNECTIONS.add(reply);
-    req.on("close", () => {
-      CONNECTIONS.delete(reply);
-    });
-
-    serverSentEvents = (event) => {
-      CONNECTIONS.forEach((rep) => {
-        if (rep.destroyed || rep.writableEnded) {
-          CONNECTIONS.delete(rep);
-          return;
-        }
-
-        rep.write(`data: ${JSON.stringify(event)}\n\n`);
-      });
-    };
+    sse.connect(req, reply);
   });
 
   app.use(async (_req, res) => {
@@ -221,71 +190,4 @@ async function getBundleConfig(): Promise<Config> {
   } catch {
     return base;
   }
-}
-
-const htmlIdMap = new Map();
-export function addHMRCode(
-  html: string,
-  file: string,
-  ast?: ReturnType<typeof parse | typeof parseFragment>,
-) {
-  if (!htmlIdMap.has(file)) {
-    htmlIdMap.set(file, randomText());
-  }
-  const id = htmlIdMap.get(file);
-
-  const script = createScript(
-    { type: "module", "data-hmr-client": id },
-    buildHMRClient(file, id, bundleConfig.src),
-  );
-
-  let DOM;
-  if (html.includes("<!DOCTYPE html>") || html.includes("<html")) {
-    DOM = ast || parse(html);
-    const headNode = findElement(DOM as Node, (e) => getTagName(e) === "head");
-    insertHeadClient(headNode as Node, script);
-  } else {
-    DOM = ast || parseFragment(html);
-    prependChild(DOM as Node, script);
-  }
-
-  //@ts-ignore
-  DOM.childNodes.forEach((node) =>
-    node.attrs?.push({ name: "data-hmr", value: id }),
-  );
-
-  return serialize(DOM as any);
-}
-
-function randomText() {
-  return Math.random().toString(32).slice(2);
-}
-
-// Produce the per-page HMR client by substituting tokens into the shared runtime
-// template (src/hmr-client.ts). The runtime is injected as an inline module so
-// esbuild bundles hydro-js for it, but it coordinates through a single global hub
-// so every composed page shares one EventSource and patches its own region.
-function buildHMRClient(file: string, id: string, src: string) {
-  return hmrClientTemplate
-    .replaceAll("__HMR_FILE__", file)
-    .replaceAll("__HMR_ID__", id)
-    .replaceAll("__HMR_SRC__", src);
-}
-
-function prependChild(parent: Node, node: unknown) {
-  // Insert as the first child so the HMR client runs before the page's own
-  // scripts — required for window.htmlBundleHMR.dispose()/data to be usable on
-  // initial load.
-  (node as { parentNode?: unknown }).parentNode = parent;
-  (parent as unknown as { childNodes: unknown[] }).childNodes.unshift(node);
-}
-
-function insertHeadClient(parent: Node, node: unknown) {
-  const children = (parent as unknown as { childNodes: Node[] }).childNodes;
-  const lastBaseIndex = children.findLastIndex(
-    (child) => getTagName(child) === "base",
-  );
-
-  (node as { parentNode?: unknown }).parentNode = parent;
-  children.splice(lastBaseIndex + 1, 0, node as Node);
 }
