@@ -45,7 +45,7 @@
     "await-spawn": "^4.0.2",
     "beasties": "^0.4.3",
     "chokidar": "^5.0.0",
-    "cssnano": "^8.0.5",
+    "cssnano": "^9.0.0",
     "esbuild": "^0.28.2",
     "express": "^5.2.1",
     "glob": "^13.0.6",
