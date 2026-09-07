@@ -66,10 +66,14 @@ export class HTMLTransformer {
             const isReferencedScript = script.attrs.find((a) => a.name === "src");
             const type = script.attrs.find((a) => a.name === "type");
             const scriptContent = scriptTextNode?.value;
-            if (!scriptContent ||
-                isReferencedScript ||
-                type?.value === "importmap" ||
-                type?.value === "application/ld+json") {
+            const scriptType = type?.value?.split(";", 1)[0].trim().toLowerCase();
+            const executable = !scriptType ||
+                scriptType === "module" ||
+                scriptType === "text/javascript" ||
+                scriptType === "application/javascript" ||
+                scriptType === "application/ecmascript" ||
+                scriptType === "text/ecmascript";
+            if (!scriptContent || isReferencedScript || !executable) {
                 return undefined;
             }
             const sourceFile = file.replace(".html", `-bundle-${index}.tsx`);

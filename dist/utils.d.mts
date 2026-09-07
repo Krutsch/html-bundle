@@ -3,6 +3,7 @@ import type { Router } from "express-serve-static-core";
 import { type Server } from "http";
 import type { Server as HTTPSServer } from "https";
 import postcssrc from "postcss-load-config";
+import cssnano from "cssnano";
 import { type HMRMessage } from "./hmr-protocol.mjs";
 import { type ParsedHTML } from "./html-transformation.mjs";
 export declare const bundleConfig: Config;
@@ -15,7 +16,7 @@ export declare let serverSentEvents: undefined | ((event: HMREvent) => void);
 export declare function createDefaultServer(isSecure: boolean): Promise<[Router, Server | HTTPSServer]>;
 export declare function listenOnAvailablePort(server: Server | HTTPSServer, port: number, host?: string): Promise<number>;
 export declare function getPostCSSConfig(): Promise<postcssrc.Result | {
-    plugins: ((options?: {}) => any)[];
+    plugins: (typeof cssnano)[];
     options: {};
     file: string;
 }>;

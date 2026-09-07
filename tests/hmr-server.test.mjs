@@ -6,7 +6,14 @@ import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
 import http from "node:http";
 import https from "node:https";
-import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -15,6 +22,15 @@ const repoRoot = path.resolve(new URL("..", import.meta.url).pathname);
 const bundlePath = path.join(repoRoot, "dist", "bundle.mjs");
 const PORT = 5323;
 const execFilePromise = promisify(execFile);
+
+async function linkHydro(cwd) {
+  await mkdir(path.join(cwd, "node_modules"), { recursive: true });
+  await symlink(
+    path.join(repoRoot, "node_modules", "hydro-js"),
+    path.join(cwd, "node_modules", "hydro-js"),
+    "dir",
+  );
+}
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -187,6 +203,7 @@ test("secure HMR server redirects plain HTTP on the same port", async (t) => {
   const cwd = await mkdtemp(path.join(tmpdir(), "html-bundle-secure-hmr-"));
   t.after(() => rm(cwd, { force: true, recursive: true }));
   await mkdir(path.join(cwd, "src"), { recursive: true });
+  await linkHydro(cwd);
   if (!(await writeLocalhostCertificate(cwd, t))) return;
   const blocker = await startPortBlocker();
   t.after(() => new Promise((resolve) => blocker.server.close(resolve)));
@@ -235,6 +252,7 @@ test("HMR server tries the next port when configured port is occupied", async (t
   const cwd = await mkdtemp(path.join(tmpdir(), "html-bundle-port-fallback-"));
   t.after(() => rm(cwd, { force: true, recursive: true }));
   await mkdir(path.join(cwd, "src"), { recursive: true });
+  await linkHydro(cwd);
   const blocker = await startPortBlocker();
   t.after(() => new Promise((resolve) => blocker.server.close(resolve)));
 
@@ -270,6 +288,7 @@ test("HMR server emits typed events and funnels module edits to owning pages", a
   const cwd = await mkdtemp(path.join(tmpdir(), "html-bundle-hmr-"));
   t.after(() => rm(cwd, { force: true, recursive: true }));
   await mkdir(path.join(cwd, "src"), { recursive: true });
+  await linkHydro(cwd);
 
   await writeFile(
     path.join(cwd, "bundle.config.js"),
@@ -435,6 +454,7 @@ test("HMR server rebuilds pages when imported JSON changes", async (t) => {
   const cwd = await mkdtemp(path.join(tmpdir(), "html-bundle-json-hmr-"));
   t.after(() => rm(cwd, { force: true, recursive: true }));
   await mkdir(path.join(cwd, "src"), { recursive: true });
+  await linkHydro(cwd);
 
   await writeFile(
     path.join(cwd, "bundle.config.js"),

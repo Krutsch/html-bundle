@@ -17,6 +17,7 @@ export type Config = {
     isCritical?: boolean;
     hmr?: boolean;
     handler?: string;
+    installMissingDependencies?: boolean;
     handlerConcurrency?: number;
     maxHandlerConcurrency?: number;
     host?: string;

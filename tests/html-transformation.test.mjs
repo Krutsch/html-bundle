@@ -17,6 +17,8 @@ test("HTML transformation classifies documents, fragments, and preserved scripts
     `<!DOCTYPE html><html><head>
       <script type="importmap">{"imports":{"app":"./app.js"}}</script>
       <script type="application/ld+json">{"@type":"WebSite"}</script>
+      <script type="application/json">{"state":"keep"}</script>
+      <script type="speculationrules">{"prerender":[]}</script>
       <script type="module">window.documentScript = true;</script>
     </head><body><main>Document</main></body></html>`,
   );
@@ -38,12 +40,14 @@ test("HTML transformation classifies documents, fragments, and preserved scripts
   assert.equal(fragmentTransformation.scripts.length, 1);
   assert.match(documentTransformation.serialize(), /type="importmap"/);
   assert.match(documentTransformation.serialize(), /application\/ld\+json/);
+  assert.match(documentTransformation.serialize(), /application\/json/);
+  assert.match(documentTransformation.serialize(), /speculationrules/);
   assert.match(fragmentTransformation.serialize(), /<main>One<\/main>/);
   assert.match(fragmentTransformation.serialize(), /<section>Two<\/section>/);
   assert.deepEqual(
     transformer.generatedFiles().sort(),
     [
-      documentFile.replace(".html", "-bundle-2.tsx"),
+      documentFile.replace(".html", "-bundle-4.tsx"),
       fragmentFile.replace(".html", "-bundle-0.tsx"),
     ].sort(),
   );

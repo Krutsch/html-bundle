@@ -39,6 +39,9 @@ const beasties = new Beasties({
   ...bundleConfig.critical,
 });
 const isSecure = process.argv.includes("--secure") || bundleConfig.secure; // uses CSP for critical too
+const installMissingDependencies =
+  process.argv.includes("--install-missing") ||
+  bundleConfig.installMissingDependencies;
 const handlerFile = process.argv.includes("--handler")
   ? process.argv[process.argv.indexOf("--handler") + 1]
   : bundleConfig.handler;
@@ -356,8 +359,12 @@ async function minifyCSS(file: string, buildFile: string) {
       to: buildFile,
     });
     await writeFile(buildFile, result.css);
-  } catch (err) {
-    console.error(getErrorMessage(err));
+  } catch (error) {
+    if (isHMR) {
+      console.error(getErrorMessage(error));
+      return;
+    }
+    throw error;
   }
 }
 
@@ -380,6 +387,7 @@ async function minifyCode(): Promise<void> {
       ...bundleConfig.esbuild,
     });
   } catch (err: any) {
+    if (err?.errors && !installMissingDependencies) throw err;
     let missingPkg = false;
     if (err?.errors) {
       for (const error of err.errors) {
@@ -434,7 +442,13 @@ async function minifyHTML(file: string, buildFile: string) {
       });
       node.value = css;
     } catch (err) {
-      console.error(getErrorMessage(err));
+      if (isHMR) {
+        console.error(getErrorMessage(err));
+      } else {
+        throw new Error(`Failed to process inline CSS in ${file}`, {
+          cause: err,
+        });
+      }
     }
   }
 
@@ -448,7 +462,11 @@ async function minifyHTML(file: string, buildFile: string) {
       ...bundleConfig["html-minifier-terser"],
     });
   } catch (e) {
-    console.error(e);
+    if (isHMR) {
+      console.error(e);
+    } else {
+      throw new Error(`Failed to minify HTML ${file}`, { cause: e });
+    }
   }
 
   if (isCritical) {
@@ -460,7 +478,13 @@ async function minifyHTML(file: string, buildFile: string) {
         fileText = fileText.replace(/<\/?(html|head|body)>/g, "");
       }
     } catch (err) {
-      console.error(err);
+      if (isHMR) {
+        console.error(err);
+      } else {
+        throw new Error(`Failed to extract critical CSS from ${file}`, {
+          cause: err,
+        });
+      }
     }
   }
 
@@ -508,6 +532,7 @@ export type Config = {
   isCritical?: boolean;
   hmr?: boolean;
   handler?: string;
+  installMissingDependencies?: boolean;
   handlerConcurrency?: number;
   maxHandlerConcurrency?: number;
   host?: string;

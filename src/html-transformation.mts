@@ -106,13 +106,16 @@ export class HTMLTransformer {
           (a: { name: string }) => a.name === "type",
         );
         const scriptContent = scriptTextNode?.value;
+        const scriptType = type?.value?.split(";", 1)[0].trim().toLowerCase();
+        const executable =
+          !scriptType ||
+          scriptType === "module" ||
+          scriptType === "text/javascript" ||
+          scriptType === "application/javascript" ||
+          scriptType === "application/ecmascript" ||
+          scriptType === "text/ecmascript";
 
-        if (
-          !scriptContent ||
-          isReferencedScript ||
-          type?.value === "importmap" ||
-          type?.value === "application/ld+json"
-        ) {
+        if (!scriptContent || isReferencedScript || !executable) {
           return undefined;
         }
 

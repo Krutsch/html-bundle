@@ -152,7 +152,7 @@ test("CLI does not pass unresolved local imports to npm", async (t) => {
   await assert.rejects(readFile(npmMarker, "utf8"), { code: "ENOENT" });
 });
 
-test("CLI reports inline PostCSS failures without crashing", async (t) => {
+test("CLI fails on inline PostCSS failures", async (t) => {
   const cwd = await mkdtemp(path.join(tmpdir(), "html-bundle-postcss-error-"));
   t.after(() => rm(cwd, { force: true, recursive: true }));
 
@@ -175,11 +175,14 @@ test("CLI reports inline PostCSS failures without crashing", async (t) => {
     `<!DOCTYPE html><html><head><title>CSS error</title><style>main { color: red; }</style></head><body><main>CSS error</main></body></html>`,
   );
 
-  const { stderr } = await execFilePromise(process.execPath, [bundlePath], {
-    cwd,
-  });
-  assert.match(stderr, /INLINE_CSS_FAILURE/);
-  assert.doesNotMatch(stderr, /err is not defined|undefined/);
+  await assert.rejects(
+    execFilePromise(process.execPath, [bundlePath], { cwd }),
+    (error) => {
+      assert.match(String(error.stderr), /INLINE_CSS_FAILURE/);
+      assert.doesNotMatch(String(error.stderr), /err is not defined|undefined/);
+      return true;
+    },
+  );
 });
 
 test("addHMRCode injects stable HMR wiring", async () => {

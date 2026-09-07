@@ -107,6 +107,7 @@ Generate the config in the root and call it "bundle.config.js"
 **esbuild:** Your additional config<br>
 **html-minifier-terser:** Your additional config<br>
 **critical:** Your additional config<br>
+**installMissingDependencies:** Whether unresolved packages may be installed automatically. Defaults to false<br>
 
 Example:
 
@@ -116,6 +117,7 @@ export default {
   secure: true,
   handler: "utils/staticFiles.js",
   handlerConcurrency: 4,
+  installMissingDependencies: true,
   esbuild: {
     external: ["images"],
   },

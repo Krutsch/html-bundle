@@ -24,6 +24,8 @@ const beasties = new Beasties({
     ...bundleConfig.critical,
 });
 const isSecure = process.argv.includes("--secure") || bundleConfig.secure; // uses CSP for critical too
+const installMissingDependencies = process.argv.includes("--install-missing") ||
+    bundleConfig.installMissingDependencies;
 const handlerFile = process.argv.includes("--handler")
     ? process.argv[process.argv.indexOf("--handler") + 1]
     : bundleConfig.handler;
@@ -301,8 +303,12 @@ async function minifyCSS(file, buildFile) {
         });
         await writeFile(buildFile, result.css);
     }
-    catch (err) {
-        console.error(getErrorMessage(err));
+    catch (error) {
+        if (isHMR) {
+            console.error(getErrorMessage(error));
+            return;
+        }
+        throw error;
     }
 }
 async function minifyCode() {
@@ -325,6 +331,8 @@ async function minifyCode() {
         });
     }
     catch (err) {
+        if (err?.errors && !installMissingDependencies)
+            throw err;
         let missingPkg = false;
         if (err?.errors) {
             for (const error of err.errors) {
@@ -371,7 +379,14 @@ async function minifyHTML(file, buildFile) {
             node.value = css;
         }
         catch (err) {
-            console.error(getErrorMessage(err));
+            if (isHMR) {
+                console.error(getErrorMessage(err));
+            }
+            else {
+                throw new Error(`Failed to process inline CSS in ${file}`, {
+                    cause: err,
+                });
+            }
         }
     }
     let fileText = transformation.serialize();
@@ -384,7 +399,12 @@ async function minifyHTML(file, buildFile) {
         });
     }
     catch (e) {
-        console.error(e);
+        if (isHMR) {
+            console.error(e);
+        }
+        else {
+            throw new Error(`Failed to minify HTML ${file}`, { cause: e });
+        }
     }
     if (isCritical) {
         try {
@@ -396,7 +416,14 @@ async function minifyHTML(file, buildFile) {
             }
         }
         catch (err) {
-            console.error(err);
+            if (isHMR) {
+                console.error(err);
+            }
+            else {
+                throw new Error(`Failed to extract critical CSS from ${file}`, {
+                    cause: err,
+                });
+            }
         }
     }
     await writeFile(buildFile, fileText);
