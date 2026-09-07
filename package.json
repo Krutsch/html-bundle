@@ -43,7 +43,7 @@
   "dependencies": {
     "@web/parse5-utils": "^3.0.0",
     "await-spawn": "^4.0.2",
-    "beasties": "^0.4.3",
+    "beasties": "^0.5.3",
     "chokidar": "^5.0.0",
     "cssnano": "^9.0.0",
     "esbuild": "^0.28.2",
