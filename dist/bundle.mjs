@@ -3,7 +3,7 @@ import { performance } from "perf_hooks";
 import { readFile, rm, writeFile, readdir, lstat } from "fs/promises";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { dirname, join, sep } from "path";
+import { dirname, join, resolve, sep } from "path";
 import { availableParallelism } from "os";
 import { glob } from "glob";
 import postcss from "postcss";
@@ -16,7 +16,9 @@ import awaitSpawn from "await-spawn";
 import { fileCopy, createDefaultServer, getPostCSSConfig, getBuildPath, createDir, bundleConfig, serverSentEvents, listenOnAvailablePort, } from "./utils.mjs";
 import { HTMLTransformer } from "./html-transformation.mjs";
 import { createHTMLRebuildEvents, getBuildImpact } from "./build-impact.mjs";
+import { writeLicenseNotices } from "./license-notices.mjs";
 const isHMR = process.argv.includes("--hmr") || bundleConfig.hmr;
+const licenseNotices = process.argv.includes("--licenseNotices") || bundleConfig.licenseNotices;
 const isCritical = process.argv.includes("--isCritical") || bundleConfig.isCritical;
 const beasties = new Beasties({
     path: bundleConfig.build,
@@ -43,6 +45,8 @@ let { plugins, options, file: postcssFile } = await getPostCSSConfig();
 let CSSprocessor = postcss(plugins);
 let router;
 const inlineFiles = new Set();
+let bundledInputs = [];
+const cssInputs = new Map();
 const INLINE_BUNDLE_FILE = /-bundle-\d+.tsx$/;
 const SUPPORTED_FILES = /\.(html|css|jsx?|tsx?)$/;
 const CONFIG_EXTENSIONS = ["js", "mjs", "cjs", "ts", "mts", "cts"];
@@ -99,6 +103,7 @@ async function build(files, firstRun = true) {
         }
     }
     await Promise.all(handlerTasks);
+    await writeBuildNotices();
     console.log(`🚀 Build finished in ${(performance.now() - timer).toFixed(2)}ms ✨`);
     if (isHMR && firstRun) {
         const [dynamicRouter, server] = await createDefaultServer(isSecure);
@@ -157,6 +162,7 @@ async function build(files, firstRun = true) {
             if (fileIndex !== -1)
                 files.splice(fileIndex, 1);
             inlineFiles.delete(file);
+            cssInputs.delete(file);
             await htmlTransformer.remove(file);
             htmlTransformer
                 .takeRemovedFiles()
@@ -242,6 +248,7 @@ async function build(files, firstRun = true) {
                 }
                 serverSentEvents?.({ type: "asset", file });
             }
+            await writeBuildNotices();
         }
     }
 }
@@ -293,6 +300,27 @@ function getErrorMessage(error) {
     }
     return error instanceof Error ? error.message : String(error);
 }
+function collectCSSInputs(file, result) {
+    if (!licenseNotices)
+        return;
+    const inputs = cssInputs.get(file) || new Set();
+    for (const message of result.messages) {
+        if (message.type === "dependency" &&
+            typeof message.file === "string" &&
+            /\.css$/i.test(message.file)) {
+            inputs.add(resolve(message.file));
+        }
+    }
+    cssInputs.set(file, inputs);
+}
+async function writeBuildNotices() {
+    if (!licenseNotices)
+        return;
+    await writeLicenseNotices([
+        ...bundledInputs,
+        ...Array.from(cssInputs.values()).flatMap((inputs) => [...inputs]),
+    ], bundleConfig.build, process.cwd(), !isHMR);
+}
 async function minifyCSS(file, buildFile) {
     try {
         const fileText = await readFile(file, { encoding: "utf-8" });
@@ -301,6 +329,8 @@ async function minifyCSS(file, buildFile) {
             from: file,
             to: buildFile,
         });
+        cssInputs.delete(file);
+        collectCSSInputs(file, result);
         await writeFile(buildFile, result.css);
     }
     catch (error) {
@@ -313,7 +343,7 @@ async function minifyCSS(file, buildFile) {
 }
 async function minifyCode() {
     try {
-        await esbuild.build({
+        const result = await esbuild.build({
             entryPoints: Array.from(inlineFiles),
             charset: "utf8",
             format: "esm",
@@ -328,7 +358,11 @@ async function minifyCode() {
             outdir: bundleConfig.build,
             outbase: bundleConfig.src,
             ...bundleConfig.esbuild,
+            metafile: licenseNotices ? true : bundleConfig.esbuild?.metafile,
         });
+        if (licenseNotices) {
+            bundledInputs = Object.keys(result.metafile.inputs).map((input) => resolve(bundleConfig.esbuild?.absWorkingDir || process.cwd(), input));
+        }
     }
     catch (err) {
         if (err?.errors && !installMissingDependencies)
@@ -367,16 +401,18 @@ async function minifyHTML(file, buildFile) {
     const transformation = htmlTransformer.get(file) || (await htmlTransformer.prepare(file));
     await transformation.applyBundledScripts(buildFile);
     // Minify Inline Style
+    cssInputs.delete(file);
     for (const node of transformation.getInlineStyles()) {
         const styleContent = node?.value;
         if (!styleContent)
             continue;
         try {
-            const { css } = await CSSprocessor.process(styleContent, {
+            const result = await CSSprocessor.process(styleContent, {
                 ...options,
                 from: undefined,
             });
-            node.value = css;
+            collectCSSInputs(file, result);
+            node.value = result.css;
         }
         catch (err) {
             if (isHMR) {
@@ -438,8 +474,10 @@ async function rebuildCSS(files, config) {
     for (const file of files) {
         await minifyCSS(file, getBuildPath(file));
     }
-    if (config)
+    if (config) {
+        await writeBuildNotices();
         console.log(`⚡ modified ${config}.config`);
+    }
 }
 try {
     await cleanupStaleInlineBundleFiles();

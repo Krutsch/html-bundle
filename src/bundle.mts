@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
-import type { AcceptedPlugin } from "postcss";
+import type { AcceptedPlugin, Result } from "postcss";
 import type { Router } from "express-serve-static-core";
 import { performance } from "perf_hooks";
 import { readFile, rm, writeFile, readdir, lstat } from "fs/promises";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { dirname, join, sep } from "path";
+import { dirname, join, resolve, sep } from "path";
 import { availableParallelism } from "os";
 import { glob } from "glob";
 import postcss from "postcss";
@@ -29,8 +29,11 @@ import {
 } from "./utils.mjs";
 import { HTMLTransformer } from "./html-transformation.mjs";
 import { createHTMLRebuildEvents, getBuildImpact } from "./build-impact.mjs";
+import { writeLicenseNotices } from "./license-notices.mjs";
 
 const isHMR = process.argv.includes("--hmr") || bundleConfig.hmr;
+const licenseNotices =
+  process.argv.includes("--licenseNotices") || bundleConfig.licenseNotices;
 const isCritical =
   process.argv.includes("--isCritical") || bundleConfig.isCritical;
 const beasties = new Beasties({
@@ -60,6 +63,8 @@ let { plugins, options, file: postcssFile } = await getPostCSSConfig();
 let CSSprocessor = postcss(plugins as AcceptedPlugin[]);
 let router: Router | undefined;
 const inlineFiles = new Set<string>();
+let bundledInputs: string[] = [];
+const cssInputs = new Map<string, Set<string>>();
 const INLINE_BUNDLE_FILE = /-bundle-\d+.tsx$/;
 const SUPPORTED_FILES = /\.(html|css|jsx?|tsx?)$/;
 const CONFIG_EXTENSIONS = ["js", "mjs", "cjs", "ts", "mts", "cts"];
@@ -118,6 +123,7 @@ async function build(files: string[], firstRun = true) {
     }
   }
   await Promise.all(handlerTasks);
+  await writeBuildNotices();
 
   console.log(
     `🚀 Build finished in ${(performance.now() - timer).toFixed(2)}ms ✨`,
@@ -209,6 +215,7 @@ async function build(files: string[], firstRun = true) {
       const fileIndex = files.indexOf(file);
       if (fileIndex !== -1) files.splice(fileIndex, 1);
       inlineFiles.delete(file);
+      cssInputs.delete(file);
       await htmlTransformer.remove(file);
       htmlTransformer
         .takeRemovedFiles()
@@ -289,6 +296,7 @@ async function build(files: string[], firstRun = true) {
         }
         serverSentEvents?.({ type: "asset", file });
       }
+      await writeBuildNotices();
     }
   }
 }
@@ -350,6 +358,34 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function collectCSSInputs(file: string, result: Result) {
+  if (!licenseNotices) return;
+  const inputs = cssInputs.get(file) || new Set<string>();
+  for (const message of result.messages) {
+    if (
+      message.type === "dependency" &&
+      typeof message.file === "string" &&
+      /\.css$/i.test(message.file)
+    ) {
+      inputs.add(resolve(message.file));
+    }
+  }
+  cssInputs.set(file, inputs);
+}
+
+async function writeBuildNotices() {
+  if (!licenseNotices) return;
+  await writeLicenseNotices(
+    [
+      ...bundledInputs,
+      ...Array.from(cssInputs.values()).flatMap((inputs) => [...inputs]),
+    ],
+    bundleConfig.build,
+    process.cwd(),
+    !isHMR,
+  );
+}
+
 async function minifyCSS(file: string, buildFile: string) {
   try {
     const fileText = await readFile(file, { encoding: "utf-8" });
@@ -358,6 +394,8 @@ async function minifyCSS(file: string, buildFile: string) {
       from: file,
       to: buildFile,
     });
+    cssInputs.delete(file);
+    collectCSSInputs(file, result);
     await writeFile(buildFile, result.css);
   } catch (error) {
     if (isHMR) {
@@ -370,7 +408,7 @@ async function minifyCSS(file: string, buildFile: string) {
 
 async function minifyCode(): Promise<void> {
   try {
-    await esbuild.build({
+    const result = await esbuild.build({
       entryPoints: Array.from(inlineFiles),
       charset: "utf8",
       format: "esm",
@@ -385,7 +423,13 @@ async function minifyCode(): Promise<void> {
       outdir: bundleConfig.build,
       outbase: bundleConfig.src,
       ...bundleConfig.esbuild,
+      metafile: licenseNotices ? true : bundleConfig.esbuild?.metafile,
     });
+    if (licenseNotices) {
+      bundledInputs = Object.keys(result.metafile!.inputs).map((input) =>
+        resolve(bundleConfig.esbuild?.absWorkingDir || process.cwd(), input),
+      );
+    }
   } catch (err: any) {
     if (err?.errors && !installMissingDependencies) throw err;
     let missingPkg = false;
@@ -431,16 +475,18 @@ async function minifyHTML(file: string, buildFile: string) {
   await transformation.applyBundledScripts(buildFile);
 
   // Minify Inline Style
+  cssInputs.delete(file);
   for (const node of transformation.getInlineStyles()) {
     const styleContent = node?.value;
     if (!styleContent) continue;
 
     try {
-      const { css } = await CSSprocessor.process(styleContent, {
+      const result = await CSSprocessor.process(styleContent, {
         ...options,
         from: undefined,
       });
-      node.value = css;
+      collectCSSInputs(file, result);
+      node.value = result.css;
     } catch (err) {
       if (isHMR) {
         console.error(getErrorMessage(err));
@@ -502,7 +548,10 @@ async function rebuildCSS(files: string[], config?: string) {
     await minifyCSS(file, getBuildPath(file));
   }
 
-  if (config) console.log(`⚡ modified ${config}.config`);
+  if (config) {
+    await writeBuildNotices();
+    console.log(`⚡ modified ${config}.config`);
+  }
 }
 
 try {
@@ -533,6 +582,7 @@ export type Config = {
   hmr?: boolean;
   handler?: string;
   installMissingDependencies?: boolean;
+  licenseNotices?: boolean;
   handlerConcurrency?: number;
   maxHandlerConcurrency?: number;
   host?: string;

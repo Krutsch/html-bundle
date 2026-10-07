@@ -178,6 +178,7 @@ async function getBundleConfig(): Promise<Config> {
     critical: {},
     isCritical: false,
     hmr: false,
+    licenseNotices: false,
     secure: false,
     handler: "",
     host: "::",

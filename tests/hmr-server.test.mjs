@@ -23,6 +23,57 @@ const bundlePath = path.join(repoRoot, "dist", "bundle.mjs");
 const PORT = 5323;
 const execFilePromise = promisify(execFile);
 
+test("HMR license notices suppress missing-license warnings", async (t) => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "html-bundle-hmr-licenses-"));
+  t.after(() => rm(cwd, { force: true, recursive: true }));
+  await linkHydro(cwd);
+  const dependency = path.join(cwd, "node_modules", "fixture-missing");
+  await mkdir(dependency);
+  await mkdir(path.join(cwd, "src"));
+  await writeFile(
+    path.join(dependency, "package.json"),
+    JSON.stringify({
+      name: "fixture-missing",
+      version: "1.0.0",
+      license: "ISC",
+      main: "index.js",
+    }),
+  );
+  await writeFile(path.join(dependency, "index.js"), 'console.log("fixture");');
+  await writeFile(
+    path.join(cwd, "package.json"),
+    JSON.stringify({ type: "module" }),
+  );
+  await writeFile(
+    path.join(cwd, "bundle.config.js"),
+    'export default { port: 0, host: "127.0.0.1", licenseNotices: true };',
+  );
+  await writeFile(
+    path.join(cwd, "src", "index.html"),
+    '<script type="module">import "fixture-missing";</script><main>Fixture</main>',
+  );
+  const child = spawn(process.execPath, [bundlePath, "--hmr"], { cwd });
+  t.after(() => child.kill());
+  let stderr = "";
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+  await waitForListening(child);
+  const notices = await readFile(
+    path.join(cwd, "build", "THIRD-PARTY-NOTICES.txt"),
+    "utf8",
+  );
+  assert.match(
+    notices,
+    /No root license file found for fixture-missing@1\.0\.0/,
+  );
+  await new Promise((resolve) => {
+    child.once("exit", resolve);
+    child.kill();
+  });
+  assert.doesNotMatch(stderr, /No root license file found/);
+});
+
 async function linkHydro(cwd) {
   await mkdir(path.join(cwd, "node_modules"), { recursive: true });
   await symlink(

@@ -18,6 +18,7 @@ export type Config = {
     hmr?: boolean;
     handler?: string;
     installMissingDependencies?: boolean;
+    licenseNotices?: boolean;
     handlerConcurrency?: number;
     maxHandlerConcurrency?: number;
     host?: string;

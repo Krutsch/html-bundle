@@ -81,6 +81,169 @@ document.body.dataset.external = message;`,
   );
 });
 
+test("CLI collects license texts and notices from bundled dependencies", async (t) => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "html-bundle-licenses-"));
+  t.after(() => rm(cwd, { force: true, recursive: true }));
+  await mkdir(path.join(cwd, "src"), { recursive: true });
+  await writeFile(
+    path.join(cwd, "package.json"),
+    JSON.stringify({ type: "module" }),
+  );
+  await writeFile(
+    path.join(cwd, "bundle.config.js"),
+    "export default { licenseNotices: false };",
+  );
+  for (const name of ["@fixture/used", "transitive", "unused"]) {
+    const directory = path.join(cwd, "node_modules", name);
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      path.join(directory, "package.json"),
+      JSON.stringify({
+        name,
+        version: "1.0.0",
+        license: "MIT",
+        main: "index.js",
+        type: "module",
+      }),
+    );
+    await writeFile(
+      path.join(directory, "LICENSE"),
+      `Full permission text for ${name}`,
+    );
+    await writeFile(
+      path.join(directory, "index.js"),
+      name === "@fixture/used"
+        ? 'export { value } from "transitive";'
+        : 'export const value = "fixture";',
+    );
+  }
+  await writeFile(
+    path.join(cwd, "node_modules", "transitive", "NOTICE.txt"),
+    "Original attribution",
+  );
+  await writeFile(
+    path.join(cwd, "src", "index.html"),
+    '<script type="module">import { value } from "@fixture/used"; console.log(value);</script>',
+  );
+  await writeFile(
+    path.join(cwd, "src", "app.ts"),
+    'import { value } from "@fixture/used"; console.log(value);',
+  );
+  await execFilePromise(process.execPath, [bundlePath, "--licenseNotices"], {
+    cwd,
+  });
+  const notices = await readFile(
+    path.join(cwd, "build", "THIRD-PARTY-NOTICES.txt"),
+    "utf8",
+  );
+  assert.match(notices, /Full permission text for @fixture\/used/);
+  assert.match(notices, /Full permission text for transitive/);
+  assert.match(notices, /Original attribution/);
+  assert.doesNotMatch(notices, /unused/);
+  assert.equal(
+    notices.match(/Full permission text for @fixture\/used/g).length,
+    1,
+  );
+  await writeFile(
+    path.join(cwd, "src", "index.html"),
+    "<main>No dependencies</main>",
+  );
+  await writeFile(path.join(cwd, "src", "app.ts"), 'console.log("local");');
+  await execFilePromise(process.execPath, [bundlePath, "--licenseNotices"], {
+    cwd,
+  });
+  const rebuilt = await readFile(
+    path.join(cwd, "build", "THIRD-PARTY-NOTICES.txt"),
+    "utf8",
+  );
+  assert.doesNotMatch(rebuilt, /Full permission text|Original attribution/);
+});
+
+test("CLI collects reported CSS licenses and warns about missing license files", async (t) => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "html-bundle-css-licenses-"));
+  t.after(() => rm(cwd, { force: true, recursive: true }));
+  const cssDirectory = path.join(cwd, "node_modules", "fixture-css");
+  const missingDirectory = path.join(cwd, "node_modules", "fixture-missing");
+  await mkdir(path.join(cwd, "src"), { recursive: true });
+  await mkdir(cssDirectory, { recursive: true });
+  await mkdir(missingDirectory, { recursive: true });
+  await writeFile(
+    path.join(cwd, "package.json"),
+    JSON.stringify({ type: "module" }),
+  );
+  await writeFile(
+    path.join(cssDirectory, "package.json"),
+    JSON.stringify({ name: "fixture-css", version: "1.0.0", license: "MIT" }),
+  );
+  await writeFile(
+    path.join(cssDirectory, "LICENCE.txt"),
+    "Complete CSS permission text",
+  );
+  await writeFile(
+    path.join(cssDirectory, "styles.css"),
+    "main { color: red; }",
+  );
+  await writeFile(
+    path.join(missingDirectory, "package.json"),
+    JSON.stringify({
+      name: "fixture-missing",
+      version: "1.0.0",
+      license: "ISC",
+      main: "index.js",
+    }),
+  );
+  await writeFile(
+    path.join(missingDirectory, "index.js"),
+    'console.log("missing license");',
+  );
+  await writeFile(
+    path.join(cwd, "postcss.config.js"),
+    `export default { plugins: [{
+    postcssPlugin: "fixture-dependency",
+    Once(root, { result }) {
+      result.messages.push({ type: "dependency", plugin: "fixture-dependency", file: ${JSON.stringify(
+        path.join(cssDirectory, "styles.css"),
+      )} });
+    },
+  }] };`,
+  );
+  await writeFile(
+    path.join(cwd, "src", "index.html"),
+    '<style>main { color: red; }</style><script type="module">import "fixture-missing";</script>',
+  );
+  for (const config of [undefined, false]) {
+    if (config === false) {
+      await writeFile(
+        path.join(cwd, "bundle.config.js"),
+        "export default { licenseNotices: false };",
+      );
+    }
+    const disabled = await execFilePromise(process.execPath, [bundlePath], {
+      cwd,
+    });
+    assert.doesNotMatch(disabled.stderr, /No root license file found/);
+    await assert.rejects(
+      readFile(path.join(cwd, "build", "THIRD-PARTY-NOTICES.txt")),
+      { code: "ENOENT" },
+    );
+  }
+  await writeFile(
+    path.join(cwd, "bundle.config.js"),
+    "export default { licenseNotices: true };",
+  );
+  const result = await execFilePromise(process.execPath, [bundlePath], { cwd });
+  const notices = await readFile(
+    path.join(cwd, "build", "THIRD-PARTY-NOTICES.txt"),
+    "utf8",
+  );
+  assert.match(notices, /Complete CSS permission text/);
+  assert.match(notices, /License: ISC/);
+  assert.match(
+    result.stderr,
+    /No root license file found for fixture-missing@1\.0\.0/,
+  );
+});
+
 test("CLI fails cleanly when inline code cannot be bundled", async (t) => {
   const cwd = await mkdtemp(path.join(tmpdir(), "html-bundle-invalid-code-"));
   t.after(() => rm(cwd, { force: true, recursive: true }));

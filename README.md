@@ -48,6 +48,7 @@ $ npm run build
 `--hmr`: boots up a static server and enables Hot Module Replacement. See [HMR](#hmr) for what is hot-patched in place versus reloaded.<br>
 `--secure`: creates a secure HTTP2 over HTTPS instance. Plain HTTP requests to the same host and port redirect to HTTPS. This requires the files `localhost.pem` and `localhost-key.pem` in the root folder. You can generate them with [mkcert](https://github.com/FiloSottile/mkcert) for instance.<br>
 `--isCritical`: uses critical to extract and inline critical-path CSS to HTML.<br>
+`--licenseNotices`: generates `THIRD-PARTY-NOTICES.txt`. Disabled by default. Missing-license warnings are suppressed during HMR.<br>
 `--handler`: path to your custom handler. Here, you can handle all non-supported files. You can get the filename via `process.argv[2]`.<br>
 `--handlerConcurrency`: maximum number of handler processes running at once. Defaults to the available CPU count. For image-heavy handlers such as Sharp resizing, try 2, 4, 8, and the default value, then keep the fastest value that does not spike memory.
 
@@ -108,6 +109,7 @@ Generate the config in the root and call it "bundle.config.js"
 **html-minifier-terser:** Your additional config<br>
 **critical:** Your additional config<br>
 **installMissingDependencies:** Whether unresolved packages may be installed automatically. Defaults to false<br>
+**licenseNotices:** Whether to generate third-party notices. Defaults to false; `--licenseNotices` enables it regardless of this setting<br>
 
 Example:
 
@@ -123,6 +125,14 @@ export default {
   },
 };
 ```
+
+## Third-Party Notices
+
+Notice generation is disabled by default. Enable it with `html-bundle --licenseNotices` or `licenseNotices: true` in `bundle.config.js`. Enabled builds write `THIRD-PARTY-NOTICES.txt` into the output directory. Deploy this file alongside the generated HTML, JavaScript, CSS, and assets.
+
+The file collects package names, versions, declared license identifiers, and root LICENSE, LICENCE, COPYING, and NOTICE files from esbuild inputs and CSS dependencies reported by PostCSS. Packages are deduplicated across pages and chunks. Esbuild's default legal-comment preservation remains unchanged.
+
+A warning is emitted when a discovered package has no root license file, but only when notice generation is enabled and HMR is off. Missing-license messages remain in the generated file during HMR. This collection is not a compliance guarantee: review those messages, nested or per-file licenses, external/CDN dependencies, fonts, images, copied assets, and CSS imports not reported by PostCSS. Include any additional required notices with the deployment. Dependencies used only as build tools are not collected unless their files are build inputs.
 
 ## Concept
 

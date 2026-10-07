@@ -130,6 +130,7 @@ async function getBundleConfig() {
         critical: {},
         isCritical: false,
         hmr: false,
+        licenseNotices: false,
         secure: false,
         handler: "",
         host: "::",
