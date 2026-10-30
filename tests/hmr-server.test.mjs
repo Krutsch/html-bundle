@@ -494,10 +494,82 @@ test("HMR server emits typed events and funnels module edits to owning pages", a
     { code: "ENOENT" },
   );
 
+  const beforeAddition = events.length;
+  const addedDirectory = path.join(cwd, "src", "added");
+  await mkdir(addedDirectory);
+  await writeFile(
+    path.join(addedDirectory, "page.html"),
+    "<main>Added page</main>",
+  );
+  const addedEvent = await until(() =>
+    events
+      .slice(beforeAddition)
+      .find(
+        (event) =>
+          event.type === "html" && event.file === "src/added/page.html",
+      ),
+  );
+  assert.ok(addedEvent, "new pages should emit an html event");
+  assert.match(addedEvent.html, /Added page/);
+  assert.match(
+    await readFile(path.join(cwd, "build", "added", "page.html"), "utf8"),
+    /Added page/,
+  );
+
   // 6. Legacy untyped fields are gone (client dispatches on `type`).
   assert.ok(
     events.every((e) => typeof e.type === "string"),
     "every event carries a type",
+  );
+});
+
+test("HMR server rebuilds when configuration files change", async (t) => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "html-bundle-config-hmr-"));
+  t.after(() => rm(cwd, { force: true, recursive: true }));
+  await mkdir(path.join(cwd, "src"), { recursive: true });
+  await linkHydro(cwd);
+
+  const postcssPath = path.join(cwd, "postcss.config.js");
+  const tailwindPath = path.join(cwd, "tailwind.config.js");
+  const tsconfigPath = path.join(cwd, "tsconfig.json");
+  await writeFile(path.join(cwd, "package.json"), '{"type":"module"}');
+  await writeFile(
+    path.join(cwd, "bundle.config.js"),
+    'export default { port: 0, host: "127.0.0.1" };',
+  );
+  await writeFile(postcssPath, "export default { plugins: [] };\n");
+  await writeFile(tailwindPath, "export default {};\n");
+  await writeFile(tsconfigPath, "{}\n");
+  await writeFile(path.join(cwd, "src", "index.html"), "<main>Fixture</main>");
+  await writeFile(path.join(cwd, "src", "styles.css"), "body { color: red; }");
+
+  const server = spawn(process.execPath, [bundlePath, "--hmr"], { cwd });
+  t.after(() => server.kill("SIGKILL"));
+  let output = "";
+  server.stdout.on("data", (chunk) => (output += chunk));
+  server.stderr.on("data", () => {});
+  await waitForListening(server);
+  await wait(300);
+
+  await writeFile(postcssPath, "export default { plugins: [], map: false };\n");
+  assert.ok(
+    await until(() => output.includes("modified postcss.config")),
+    "PostCSS configuration changes should rebuild CSS",
+  );
+
+  await writeFile(tailwindPath, "export default { theme: {} };\n");
+  assert.ok(
+    await until(() => output.includes("modified tailwind.config")),
+    "Tailwind configuration changes should rebuild CSS",
+  );
+
+  const buildsBefore = (output.match(/Build finished in/g) ?? []).length;
+  await writeFile(tsconfigPath, '{"compilerOptions":{"strict":true}}\n');
+  assert.ok(
+    await until(
+      () => (output.match(/Build finished in/g) ?? []).length > buildsBefore,
+    ),
+    "TypeScript configuration changes should rebuild the project",
   );
 });
 
